@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "ג׳ין TV",
+    "slug": "gin-tv",
+    "scheme": "gin-tv",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "extra": {
+      "supabaseUrl": "https://sedkispsisljtvbeqpvm.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlZGtpc3BzaXNsanR2YmVxcHZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NjMwNTEsImV4cCI6MjA5NTEzOTA1MX0.nGB6MnMD9yfmlz7Ap0GfiMdWpM1VN_K98cVXAcBKCzM"
+    },
+    "android": {
+      "package": "com.gintv.mobile",
+      "permissions": ["CAMERA", "VIBRATE"]
+    },
+    "ios": {
+      "bundleIdentifier": "com.gintv.mobile",
+      "supportsTablet": false
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "האפליקציה צריכה גישה למצלמה כדי לסרוק קוד QR"
+        }
+      ]
+    ],
+    "locales": {
+      "he": "./he.json"
+    },
+    "runtimeVersion": "1.0.0"
+  }
+}

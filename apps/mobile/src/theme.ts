@@ -1,0 +1,18 @@
+export const theme = {
+  bg: "#0a2a1f",
+  bgSoft: "#14322a",
+  panel: "#1b3c33",
+  panel2: "#244a40",
+  felt: "#0e3a2a",
+  text: "#f4ecd6",
+  textDim: "#c2b89f",
+  gold: "#d4a85b",
+  goldSoft: "#f3d792",
+  accent: "#4caf6d",
+  danger: "#c8553d",
+  cardFace: "#fbf4dd",
+  cardBorder: "#c2a96b",
+  red: "#b73020",
+  black: "#1a1a1a",
+  glow: "#ffd166",
+};
