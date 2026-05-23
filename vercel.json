@@ -1,0 +1,9 @@
+{
+  "buildCommand": "npm --workspace shared run build && npm --workspace @gin-tv/tv run build",
+  "outputDirectory": "apps/tv/dist",
+  "installCommand": "npm install --include-workspace-root",
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

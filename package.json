@@ -1,0 +1,36 @@
+{
+  "name": "gin-tv",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ג׳ין TV — Hebrew Gin Rummy: TV table + Android controllers",
+  "workspaces": [
+    "shared",
+    "apps/tv",
+    "apps/mobile"
+  ],
+  "scripts": {
+    "build:shared": "npm --workspace shared run build",
+    "test:shared": "npm --workspace shared run test",
+    "dev:tv": "npm --workspace @gin-tv/tv run dev",
+    "dev:mobile": "npm --workspace @gin-tv/mobile run start",
+    "dev": "npm run build:shared && npm --workspace @gin-tv/tv run dev",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5",
+    "ws": "^8.21.0"
+  },
+  "overrides": {
+    "react-native": "0.74.5",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "@react-native/virtualized-lists": "0.74.87",
+    "@expo/vector-icons": {
+      "react": "18.2.0"
+    },
+    "expo": {
+      "react": "18.2.0"
+    }
+  }
+}
