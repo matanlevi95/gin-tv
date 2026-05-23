@@ -39,10 +39,16 @@ export function playerChannel(roomCode: string, token: string): string {
 export type ActionEvent =
   | {
       kind: "hello";
+      /**
+       * Phone-generated 32-char secret. Names the player's private channel so
+       * only the holder can subscribe (channel name is the access key). The TV
+       * also uses it as the per-player handle on subsequent actions.
+       */
       fromToken: string;
+      /** Stable, profile-bound player id (random uuid stored on the phone). */
+      playerId: string;
       name: string;
       avatar?: string;
-      playerId?: string; // when reconnecting
     }
   | { kind: "ready"; fromToken: string; ready: boolean }
   | { kind: "ready_next"; fromToken: string }
@@ -104,10 +110,13 @@ export function generatePlayerToken(): string {
 //
 // What the TV encodes in the QR. The phone parses this on scan.
 
+/**
+ * What the TV encodes in its QR (or what the user types as the 4-char "TV code").
+ * Single QR per TV — the phone generates its own private token on connect.
+ */
 export interface JoinPayload {
-  v: number; // protocol version
-  room: string; // 4-char room code
-  token: string; // the player slot's private token
+  v: number;
+  room: string; // 4-char stable TV identifier
   supabaseUrl: string;
   supabaseAnonKey: string;
 }
@@ -116,7 +125,6 @@ export function encodeJoinUrl(p: JoinPayload): string {
   const params = new URLSearchParams({
     v: String(p.v),
     room: p.room,
-    token: p.token,
     url: p.supabaseUrl,
     key: p.supabaseAnonKey,
   });
@@ -130,11 +138,10 @@ export function decodeJoinUrl(url: string): JoinPayload | null {
     const params = new URLSearchParams(url.substring(qIdx + 1));
     const v = parseInt(params.get("v") ?? "0", 10);
     const room = params.get("room");
-    const token = params.get("token");
     const supabaseUrl = params.get("url");
     const supabaseAnonKey = params.get("key");
-    if (!room || !token || !supabaseUrl || !supabaseAnonKey) return null;
-    return { v, room: room.toUpperCase(), token, supabaseUrl, supabaseAnonKey };
+    if (!room || !supabaseUrl || !supabaseAnonKey) return null;
+    return { v, room: room.toUpperCase(), supabaseUrl, supabaseAnonKey };
   } catch {
     return null;
   }

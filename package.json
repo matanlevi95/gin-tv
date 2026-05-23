@@ -26,6 +26,8 @@
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "@react-native/virtualized-lists": "0.74.87",
+    "@supabase/supabase-js": "2.105.4",
+    "@supabase/realtime-js": "2.10.9",
     "@expo/vector-icons": {
       "react": "18.2.0"
     },

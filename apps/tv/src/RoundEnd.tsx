@@ -8,6 +8,19 @@ interface Props {
 }
 
 export function RoundEnd({ payload, state }: Props) {
+  if (payload.reason === "cancelled") {
+    return (
+      <div className="overlay">
+        <div className="result-card" style={{ textAlign: "center" }}>
+          <h2 style={{ color: "var(--text-dim)" }}>{HE.roundCancelled}</h2>
+          <div style={{ marginTop: 16, color: "var(--text-dim)" }}>
+            לחצו {HE.readyNext} בנייד לסיבוב חדש
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const winner = state.players.find((p) => p.id === payload.winner);
   const winnerName = winner?.name ?? "";
 

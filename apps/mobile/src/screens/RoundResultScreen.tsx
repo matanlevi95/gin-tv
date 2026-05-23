@@ -62,7 +62,8 @@ export function RoundResultScreen({ navigation }: Props) {
     );
   }
 
-  const won = lastRoundEnd.winner === playerId;
+  const cancelled = lastRoundEnd.reason === "cancelled";
+  const won = !cancelled && lastRoundEnd.winner === playerId;
   const opp = publicState.players.find((p) => p.id !== playerId);
   const me = publicState.players.find((p) => p.id === playerId);
   const myDead = lastRoundEnd.deadwood[playerId ?? ""] ?? 0;
@@ -72,18 +73,29 @@ export function RoundResultScreen({ navigation }: Props) {
     <SafeAreaView style={styles.root} edges={["bottom"]}>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 22 }}>
         <View style={styles.banner}>
-          <Text style={[styles.bannerTitle, { color: won ? theme.gold : theme.textDim }]}>
-            {won ? "ניצחת! 🏆" : "הפסדת"}
-          </Text>
-          <Text style={styles.bannerReason}>
-            {lastRoundEnd.reason === "gin" && `${HE.gin}!`}
-            {lastRoundEnd.reason === "undercut" && HE.undercut}
-            {lastRoundEnd.reason === "knock" && HE.knock}
-          </Text>
-          <Text style={styles.points}>
-            {won ? "+" : ""}
-            {won ? lastRoundEnd.pointsAwarded : 0} {HE.pointsGained}
-          </Text>
+          {cancelled ? (
+            <>
+              <Text style={[styles.bannerTitle, { color: theme.textDim }]}>
+                {HE.roundCancelled}
+              </Text>
+              <Text style={styles.bannerReason}>סיבוב חדש בקרוב</Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.bannerTitle, { color: won ? theme.gold : theme.textDim }]}>
+                {won ? "ניצחת! 🏆" : "הפסדת"}
+              </Text>
+              <Text style={styles.bannerReason}>
+                {lastRoundEnd.reason === "gin" && `${HE.gin}!`}
+                {lastRoundEnd.reason === "undercut" && HE.undercut}
+                {lastRoundEnd.reason === "knock" && HE.knock}
+              </Text>
+              <Text style={styles.points}>
+                {won ? "+" : ""}
+                {won ? lastRoundEnd.pointsAwarded : 0} {HE.pointsGained}
+              </Text>
+            </>
+          )}
         </View>
 
         <View style={styles.scoreRow}>

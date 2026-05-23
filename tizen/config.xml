@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets"
+        xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://studiogameslime.com/gin-tv"
+        version="0.1.0"
+        viewmodes="maximized">
+    <tizen:application id="GTVgintv01" package="GTVgintv01" required_version="2.3"/>
+    <content src="index.html"/>
+    <feature name="http://tizen.org/feature/screen.size.normal.1080.1920"/>
+    <icon src="icon.png"/>
+    <name>ג׳ין TV</name>
+    <description>משחק ג׳ין רמי בעברית — הטלוויזיה כשולחן</description>
+    <tizen:profile name="tv"/>
+    <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+    <access origin="*" subdomains="true"/>
+    <access origin="https://sedkispsisljtvbeqpvm.supabase.co" subdomains="true"/>
+    <access origin="wss://sedkispsisljtvbeqpvm.supabase.co" subdomains="true"/>
+    <tizen:privilege name="http://tizen.org/privilege/internet"/>
+</widget>

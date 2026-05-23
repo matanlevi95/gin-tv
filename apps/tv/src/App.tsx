@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { HE, encodeJoinUrl, PROTOCOL_VERSION } from "@gin-tv/shared";
 import { Lobby } from "./Lobby";
 import { TableView } from "./TableView";
@@ -7,39 +7,14 @@ import { useRoomHost } from "./useRoomHost";
 import { SUPABASE_ANON_PUBLIC, SUPABASE_URL_PUBLIC } from "./supabase";
 
 export default function App() {
-  const { roomCode, tokens, state, roundEnd, countdown, matchEnd } = useRoomHost();
-  const [error, setError] = useState("");
+  const { roomCode, state, roundEnd, countdown } = useRoomHost();
 
-  // The QR encodes the room code, the first slot's token, and Supabase creds
-  // so the phone can connect without any backend of ours.
-  // The second phone scans the same QR — for now we let both phones use the
-  // same QR but pick different tokens (the host picks whichever slot is free
-  // based on which token has been seen first). To keep it dead simple in this
-  // version, we encode both tokens and the phone picks the first unclaimed one.
-  // (Simpler: encode just token[0], phone tries it; if "ROOM_FULL", it retries
-  //  with token[1]. We'll implement that on the mobile side.)
-  const joinUrl1 = encodeJoinUrl({
+  const joinUrl = encodeJoinUrl({
     v: PROTOCOL_VERSION,
     room: roomCode,
-    token: tokens[0] || "x",
     supabaseUrl: SUPABASE_URL_PUBLIC,
     supabaseAnonKey: SUPABASE_ANON_PUBLIC,
   });
-  const joinUrl2 = encodeJoinUrl({
-    v: PROTOCOL_VERSION,
-    room: roomCode,
-    token: tokens[1] || "y",
-    supabaseUrl: SUPABASE_URL_PUBLIC,
-    supabaseAnonKey: SUPABASE_ANON_PUBLIC,
-  });
-
-  // Suppress lint about `error` for now — host doesn't surface errors to TV in
-  // this MVP; we keep the toast machinery for future use.
-  useEffect(() => {
-    if (matchEnd) {
-      // Could show a "match over" card later; for now the round_end view covers it
-    }
-  }, [matchEnd]);
 
   if (!state) {
     return (
@@ -63,12 +38,7 @@ export default function App() {
       <div className="tv-frame">
         <div className="table">
           {isLobbyLike ? (
-            <Lobby
-              state={state}
-              joinUrl1={joinUrl1}
-              joinUrl2={joinUrl2}
-              countdown={countdown}
-            />
+            <Lobby state={state} joinUrl={joinUrl} countdown={countdown} />
           ) : (
             <>
               {countdown !== null ? (
@@ -87,7 +57,6 @@ export default function App() {
           )}
         </div>
       </div>
-      {error && <div className="error-toast">{error}</div>}
     </div>
   );
 }

@@ -4,6 +4,15 @@
  * Holds the room's GameRoomState, processes incoming ActionEvents from phones,
  * and emits PublicEvent / PrivateEvent through callbacks the caller wires to
  * Supabase channels. No DB, no server — broadcast-only.
+ *
+ * Connection model (single-QR):
+ *   - The TV has a stable 4-char roomCode (persisted in localStorage).
+ *   - The QR encodes (roomCode, supabaseUrl, supabaseAnonKey) — no per-seat token.
+ *   - Each phone generates its OWN privateToken on connect and sends it in
+ *     hello{}. The TV uses that token to address private hand updates back to
+ *     the phone via the per-player channel `gin:<code>:player:<token>`.
+ *   - Up to 2 distinct playerIds are accepted. A repeat hello from the same
+ *     playerId is treated as a reconnect (token can be refreshed).
  */
 import {
   GameRoomState,
@@ -23,76 +32,62 @@ import {
 import { generateRoomCode } from "./room";
 import {
   ActionEvent,
-  generatePlayerToken,
   PrivateEvent,
   PublicEvent,
 } from "./realtime";
 import { PlayerId } from "./types";
 
 export interface HostBroadcast {
-  /** Send to everyone in the room (public state, errors visible to all, round_end). */
+  /** Send to everyone subscribed to the room channel. */
   emitPublic: (ev: PublicEvent) => void;
-  /** Send to a single player via their private channel. */
+  /** Send to a single player via their private channel (named by their token). */
   emitPrivate: (toToken: string, ev: PrivateEvent) => void;
-  /** Send a public error addressed to one player (visible to all but intended for one). */
-  emitErrorTo?: (toToken: string, code: string, message: string) => void;
 }
 
+/** Server-side knowledge of which phone owns which seat. */
 interface PlayerSlotMeta {
-  token: string;
   playerId: PlayerId;
+  token: string; // latest private channel token for this player
 }
 
 export class RoomHost {
   readonly roomCode: string;
   private state: GameRoomState;
   private broadcast: HostBroadcast;
-  /** Maps token → playerId so we can look up the player from incoming actions. */
-  private byToken = new Map<string, PlayerSlotMeta>();
-  /** Two pre-generated tokens (one per seat) so we can build QR codes before anyone joins. */
-  readonly slotTokens: [string, string];
+  /** playerId → meta (token, etc.) */
+  private byPlayerId = new Map<PlayerId, PlayerSlotMeta>();
+  /** token → playerId for fast lookup on action events */
+  private byToken = new Map<string, PlayerId>();
   private heartbeat?: ReturnType<typeof setInterval>;
 
   constructor(broadcast: HostBroadcast, roomCode?: string) {
     this.roomCode = (roomCode || generateRoomCode()).toUpperCase();
     this.state = createRoomState(this.roomCode);
     this.broadcast = broadcast;
-    this.slotTokens = [generatePlayerToken(), generatePlayerToken()];
-    // Broadcast a heartbeat every 5s so phones can detect a dead host.
     this.heartbeat = setInterval(() => {
       this.broadcast.emitPublic({ kind: "ping" });
-    }, 5000);
+    }, 4000);
   }
 
   destroy() {
     if (this.heartbeat) clearInterval(this.heartbeat);
   }
 
-  /** Token for the Nth seat (0 or 1). Used when building QR codes. */
-  tokenForSlot(slot: 0 | 1): string {
-    return this.slotTokens[slot];
-  }
-
-  /** Returns the current public state snapshot. Useful for late re-broadcasts. */
   snapshotPublic() {
     return publicState(this.state);
   }
 
-  /** Broadcasts the current public state to everyone. */
   emitState() {
     this.broadcast.emitPublic({ kind: "state", payload: publicState(this.state) });
   }
 
-  /** Broadcasts each player's private hand to their own channel. */
   emitAllHands() {
-    for (const meta of this.byToken.values()) {
+    for (const meta of this.byPlayerId.values()) {
       const priv = privateHand(this.state, meta.playerId);
-      const token = meta.token;
-      this.broadcast.emitPrivate(token, { kind: "hand", payload: priv });
+      this.broadcast.emitPrivate(meta.token, { kind: "hand", payload: priv });
     }
   }
 
-  /** Handles an action coming from a phone over the room channel. */
   handleAction(ev: ActionEvent) {
     switch (ev.kind) {
       case "hello":
@@ -105,27 +100,27 @@ export class RoomHost {
         this.onReady(ev.fromToken, true);
         return;
       case "draw_deck": {
-        const p = this.byToken.get(ev.fromToken);
-        if (!p) return this.errTo(ev.fromToken, "UNKNOWN_PLAYER", "השחקן לא בחדר");
-        const err = drawFromDeck(this.state, p.playerId);
+        const playerId = this.byToken.get(ev.fromToken);
+        if (!playerId) return this.errTo(ev.fromToken, "UNKNOWN_PLAYER", "השחקן לא בחדר");
+        const err = drawFromDeck(this.state, playerId);
         if (err) return this.errTo(ev.fromToken, err.code, errMsg(err.code));
         this.emitState();
         this.emitAllHands();
         return;
       }
       case "draw_discard": {
-        const p = this.byToken.get(ev.fromToken);
-        if (!p) return this.errTo(ev.fromToken, "UNKNOWN_PLAYER", "השחקן לא בחדר");
-        const err = drawFromDiscard(this.state, p.playerId);
+        const playerId = this.byToken.get(ev.fromToken);
+        if (!playerId) return this.errTo(ev.fromToken, "UNKNOWN_PLAYER", "השחקן לא בחדר");
+        const err = drawFromDiscard(this.state, playerId);
         if (err) return this.errTo(ev.fromToken, err.code, errMsg(err.code));
         this.emitState();
         this.emitAllHands();
         return;
       }
       case "discard": {
-        const p = this.byToken.get(ev.fromToken);
-        if (!p) return this.errTo(ev.fromToken, "UNKNOWN_PLAYER", "השחקן לא בחדר");
-        const err = gameDiscard(this.state, p.playerId, ev.cardId);
+        const playerId = this.byToken.get(ev.fromToken);
+        if (!playerId) return this.errTo(ev.fromToken, "UNKNOWN_PLAYER", "השחקן לא בחדר");
+        const err = gameDiscard(this.state, playerId, ev.cardId);
         if (err) return this.errTo(ev.fromToken, err.code, errMsg(err.code));
         this.emitState();
         this.emitAllHands();
@@ -133,11 +128,11 @@ export class RoomHost {
       }
       case "knock":
       case "gin": {
-        const p = this.byToken.get(ev.fromToken);
-        if (!p) return this.errTo(ev.fromToken, "UNKNOWN_PLAYER", "השחקן לא בחדר");
+        const playerId = this.byToken.get(ev.fromToken);
+        if (!playerId) return this.errTo(ev.fromToken, "UNKNOWN_PLAYER", "השחקן לא בחדר");
         const res = declareKnockOrGin(
           this.state,
-          p.playerId,
+          playerId,
           ev.discardCardId,
           ev.kind
         );
@@ -163,49 +158,46 @@ export class RoomHost {
         return;
       }
       case "reorder_hand": {
-        const p = this.byToken.get(ev.fromToken);
-        if (!p) return;
-        reorderHand(this.state, p.playerId, ev.order);
-        const priv = privateHand(this.state, p.playerId);
+        const playerId = this.byToken.get(ev.fromToken);
+        if (!playerId) return;
+        reorderHand(this.state, playerId, ev.order);
+        const priv = privateHand(this.state, playerId);
         this.broadcast.emitPrivate(ev.fromToken, { kind: "hand", payload: priv });
         return;
       }
     }
   }
 
-  // ---- internal ----
-
+  /** Phones report they're connected (or reconnecting) with their stable playerId + fresh privateToken. */
   private onHello(ev: Extract<ActionEvent, { kind: "hello" }>) {
-    let existing = this.byToken.get(ev.fromToken);
+    const existing = this.byPlayerId.get(ev.playerId);
     if (existing) {
-      // reconnect: update name/avatar, mark connected
-      const slot = this.state.players.find((pp) => pp.id === existing!.playerId);
+      // Reconnect — refresh token, restore connectivity, refresh name/avatar.
+      this.byToken.delete(existing.token);
+      existing.token = ev.fromToken;
+      this.byToken.set(ev.fromToken, ev.playerId);
+      const slot = this.state.players.find((p) => p.id === ev.playerId);
       if (slot) {
+        slot.connected = true;
         slot.name = ev.name || slot.name;
         if (ev.avatar) slot.avatar = ev.avatar;
-        slot.connected = true;
       }
       this.broadcast.emitPrivate(ev.fromToken, {
         kind: "joined",
-        playerId: existing.playerId,
+        playerId: ev.playerId,
         roomCode: this.roomCode,
       });
       this.emitState();
       this.emitAllHands();
       return;
     }
-    // Assign to the first free slot (matching this token).
-    const slotIdx = this.slotTokens.indexOf(ev.fromToken) as 0 | 1 | -1;
-    if (slotIdx < 0) {
-      return this.errTo(ev.fromToken, "BAD_TOKEN", "טוקן לא תקין");
-    }
+    // New player — claim a seat if one is open.
     if (this.state.players.length >= 2) {
-      // already 2 players; reject extra connections to slot tokens that were already used.
-      return this.errTo(ev.fromToken, "ROOM_FULL", "החדר מלא");
+      this.errTo(ev.fromToken, "ROOM_FULL", "החדר מלא");
+      return;
     }
-    const playerId = `p_${ev.fromToken.substring(0, 8)}`;
     const slot: PlayerSlot = {
-      id: playerId,
+      id: ev.playerId,
       name: ev.name || "אורח",
       avatar: ev.avatar,
       score: 0,
@@ -214,23 +206,23 @@ export class RoomHost {
       hand: [],
     };
     this.state.players.push(slot);
-    this.byToken.set(ev.fromToken, { token: ev.fromToken, playerId });
+    this.byPlayerId.set(ev.playerId, { playerId: ev.playerId, token: ev.fromToken });
+    this.byToken.set(ev.fromToken, ev.playerId);
     this.broadcast.emitPrivate(ev.fromToken, {
       kind: "joined",
-      playerId,
+      playerId: ev.playerId,
       roomCode: this.roomCode,
     });
     this.emitState();
   }
 
   private onReady(fromToken: string, ready: boolean) {
-    const meta = this.byToken.get(fromToken);
-    if (!meta) return;
-    const slot = this.state.players.find((p) => p.id === meta.playerId);
+    const playerId = this.byToken.get(fromToken);
+    if (!playerId) return;
+    const slot = this.state.players.find((p) => p.id === playerId);
     if (!slot) return;
     slot.ready = ready;
     this.emitState();
-    // If both ready and we're in lobby or round_end, deal.
     if (
       (this.state.status === "lobby" || this.state.status === "round_end") &&
       allReady(this.state)
@@ -248,11 +240,7 @@ export class RoomHost {
   }
 
   private errTo(token: string, code: string, message: string) {
-    if (this.broadcast.emitErrorTo) {
-      this.broadcast.emitErrorTo(token, code, message);
-    } else {
-      this.broadcast.emitPublic({ kind: "error", toToken: token, code, message });
-    }
+    this.broadcast.emitPublic({ kind: "error", toToken: token, code, message });
   }
 }
 
@@ -272,6 +260,8 @@ function errMsg(code: string): string {
       return "אי אפשר להכריז נקישה כעת";
     case "ILLEGAL_GIN":
       return "אי אפשר להכריז ג׳ין כעת";
+    case "JUST_TOOK_FROM_DISCARD":
+      return "אסור לזרוק בחזרה את הקלף שהרגע לקחת מהזריקה";
     default:
       return "אופס, משהו השתבש";
   }

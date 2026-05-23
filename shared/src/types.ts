@@ -80,8 +80,9 @@ export interface Meld {
 }
 
 export interface RoundEndPayload {
+  /** Empty string when reason="cancelled". */
   winner: PlayerId;
-  reason: "gin" | "knock" | "undercut";
+  reason: "gin" | "knock" | "undercut" | "cancelled";
   knocker?: PlayerId;
   hands: Record<PlayerId, Card[]>;
   melds: Record<PlayerId, Meld[]>;
@@ -213,6 +214,20 @@ export const HE = {
   ach_undercut: "מהפך באנדרקאט",
   ach_10games: "10 משחקים",
   ach_50games: "50 משחקים",
+  // round-cancellation
+  roundCancelled: "הסיבוב בוטל — הקלפים נגמרו",
+  // saved TVs
+  myTVs: "הטלוויזיות שלי",
+  addTV: "הוסף טלוויזיה",
+  tvOnline: "מחוברת",
+  tvOffline: "לא מחוברת",
+  enterCode: "הקלד קוד טלוויזיה",
+  manualConnect: "התחבר עם קוד",
+  saveTV: "שמור טלוויזיה",
+  tvLabel: "שם לטלוויזיה (לדוגמה: סלון)",
+  connecting: "מתחבר…",
+  noSavedTvs: "עוד לא חיברת טלוויזיה",
+  scanQrToBegin: "סרוק QR או הקלד קוד כדי להתחיל",
 } as const;
 
 export type HebrewKey = keyof typeof HE;

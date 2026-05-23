@@ -1,16 +1,57 @@
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
+import React, { useEffect } from "react";
+import { Alert, StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { HE } from "@gin-tv/shared";
 import { theme } from "../theme";
-import { useGame } from "../state/GameContext";
+import { useGame, SavedTV } from "../state/GameContext";
 import { RootStackParamList } from "../../App";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Home">;
 
 export function HomeScreen({ navigation }: Props) {
-  const { profile } = useGame();
+  const {
+    profile,
+    tvStatuses,
+    startTvStatusPoll,
+    stopTvStatusPoll,
+    joinRoom,
+    removeTV,
+  } = useGame();
+
+  useEffect(() => {
+    startTvStatusPoll();
+    return () => {
+      // We DON'T stop on unmount — polling continues so status is fresh when we come back.
+      // To stop, call from a settings screen or app foreground/background hooks.
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.tvs.length]);
+
+  const connectToTV = async (tv: SavedTV) => {
+    const status = tvStatuses[tv.code];
+    if (status === "offline") {
+      Alert.alert("הטלוויזיה לא מחוברת", "ודא שהיא דלוקה ושהאפליקציה פתוחה עליה");
+      return;
+    }
+    const res = await joinRoom({
+      roomCode: tv.code,
+      supabaseUrl: tv.supabaseUrl,
+      supabaseAnonKey: tv.supabaseAnonKey,
+    });
+    if (res.ok) {
+      navigation.navigate("Lobby", { roomCode: tv.code });
+    } else {
+      Alert.alert("שגיאה", res.error || HE.errorGeneric);
+    }
+  };
+
+  const longPressRemove = (tv: SavedTV) => {
+    Alert.alert(tv.label, "מה לעשות?", [
+      { text: "ביטול", style: "cancel" },
+      { text: "הסר מהרשימה", style: "destructive", onPress: () => removeTV(tv.code) },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.root} edges={["top", "bottom"]}>
@@ -35,12 +76,44 @@ export function HomeScreen({ navigation }: Props) {
           <Stat label={HE.gamesPlayed} value={profile.gamesPlayed} />
         </View>
 
+        {/* Saved TVs section */}
+        <Text style={styles.sectionTitle}>{HE.myTVs}</Text>
+
+        {profile.tvs.length === 0 && (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>{HE.noSavedTvs}</Text>
+            <Text style={styles.emptySub}>{HE.scanQrToBegin}</Text>
+          </View>
+        )}
+
+        {profile.tvs.map((tv) => {
+          const status = tvStatuses[tv.code] ?? "checking";
+          return (
+            <TouchableOpacity
+              key={tv.code}
+              style={[styles.tvTile, status === "online" && styles.tvTileOnline, status === "offline" && styles.tvTileOffline]}
+              activeOpacity={0.85}
+              onPress={() => connectToTV(tv)}
+              onLongPress={() => longPressRemove(tv)}
+            >
+              <View style={[styles.tvDot, statusStyle(status)]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.tvLabel}>{tv.label}</Text>
+                <Text style={styles.tvCode}>קוד: {tv.code}</Text>
+              </View>
+              <Text style={styles.tvStatusText}>
+                {status === "online" ? HE.tvOnline : status === "offline" ? HE.tvOffline : "בודק…"}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+
         <TouchableOpacity
           style={styles.primaryBtn}
           activeOpacity={0.85}
           onPress={() => navigation.navigate("Scan")}
         >
-          <Text style={styles.primaryBtnText}>{HE.joinTv}</Text>
+          <Text style={styles.primaryBtnText}>{HE.addTV} / {HE.joinTv}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 18 }} />
@@ -51,6 +124,17 @@ export function HomeScreen({ navigation }: Props) {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function statusStyle(status: string) {
+  switch (status) {
+    case "online":
+      return { backgroundColor: theme.accent, shadowColor: theme.accent, shadowOpacity: 0.7, shadowRadius: 6 };
+    case "offline":
+      return { backgroundColor: theme.danger };
+    default:
+      return { backgroundColor: "#888" };
+  }
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -110,18 +194,49 @@ const styles = StyleSheet.create({
   },
   statValue: { color: theme.goldSoft, fontSize: 26, fontWeight: "900" },
   statLabel: { color: theme.textDim, marginTop: 4, fontSize: 12 },
+  sectionTitle: { color: theme.textDim, fontSize: 14, marginBottom: 10, marginTop: 4, fontWeight: "700" },
+  emptyBox: {
+    backgroundColor: theme.panel,
+    padding: 18,
+    borderRadius: 14,
+    alignItems: "center",
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(212,168,91,0.15)",
+  },
+  emptyText: { color: theme.text, fontSize: 16, fontWeight: "700" },
+  emptySub: { color: theme.textDim, fontSize: 13, marginTop: 4 },
+  tvTile: {
+    backgroundColor: theme.panel,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(212,168,91,0.15)",
+  },
+  tvTileOnline: { borderColor: theme.accent },
+  tvTileOffline: { borderColor: "rgba(200, 85, 61, 0.4)", opacity: 0.7 },
+  tvDot: { width: 14, height: 14, borderRadius: 7 },
+  tvLabel: { color: theme.text, fontSize: 17, fontWeight: "800" },
+  tvCode: { color: theme.textDim, fontSize: 13, marginTop: 2, letterSpacing: 2 },
+  tvStatusText: { color: theme.textDim, fontSize: 13, fontWeight: "600" },
   primaryBtn: {
     backgroundColor: theme.gold,
     borderRadius: 16,
     paddingVertical: 18,
     alignItems: "center",
+    marginTop: 8,
     shadowColor: theme.gold,
     shadowOpacity: 0.4,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 0 },
     elevation: 8,
   },
-  primaryBtnText: { color: "#2a1a05", fontWeight: "900", fontSize: 20 },
+  primaryBtnText: { color: "#2a1a05", fontWeight: "900", fontSize: 18 },
   tile: {
     backgroundColor: theme.panel,
     borderRadius: 14,

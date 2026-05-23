@@ -3,7 +3,11 @@
   "outputDirectory": "apps/tv/dist",
   "installCommand": "npm install --include-workspace-root",
   "framework": null,
+  "redirects": [
+    { "source": "/apk", "destination": "https://github.com/matanlevi95/gin-tv/releases/download/v0.1.0/gin-tv.apk", "permanent": false },
+    { "source": "/wgt", "destination": "https://github.com/matanlevi95/gin-tv/releases/download/v0.1.0/gin-tv.wgt", "permanent": false }
+  ],
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!assets|.*\\.(?:png|jpg|svg|ico|webmanifest|json|txt)$).*)", "destination": "/index.html" }
   ]
 }

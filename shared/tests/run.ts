@@ -344,6 +344,49 @@ section("Game flow");
   check("discard pile loses top after draw", state.discard.length === 1);
 }
 
+// ---------------- Pagat rules: can't re-discard same card just taken from discard ----------------
+section("Can't re-discard same card");
+{
+  const state = createRoomState("TEST");
+  state.players.push({ id: "p1", name: "A", score: 0, ready: true, connected: true, hand: [] });
+  state.players.push({ id: "p2", name: "B", score: 0, ready: true, connected: true, hand: [] });
+  dealRound(state, () => 0.3);
+  const p1 = state.players[0].id;
+  // p1 draws from discard
+  const top = state.discard[state.discard.length - 1];
+  const r1 = drawFromDiscard(state, p1);
+  check("draw discard ok", r1 === null);
+  // attempt to discard the same card
+  const r2 = discard(state, p1, top.id);
+  check("re-discard rejected", r2?.code === "JUST_TOOK_FROM_DISCARD");
+  // discard a different card succeeds
+  const other = state.players[0].hand.find((c) => c.id !== top.id)!;
+  const r3 = discard(state, p1, other.id);
+  check("different card discard ok", r3 === null);
+}
+
+// ---------------- Pagat: round cancellation on deck exhaustion ----------------
+section("Deck-exhaustion round cancellation");
+{
+  const state = createRoomState("TEST");
+  state.players.push({ id: "p1", name: "A", score: 0, ready: true, connected: true, hand: [] });
+  state.players.push({ id: "p2", name: "B", score: 0, ready: true, connected: true, hand: [] });
+  dealRound(state, () => 0.5);
+  // Force deck to 3 cards: simulate having drawn down to that point
+  state.deck = state.deck.slice(-3); // keep only 3
+  // Player draws from deck (deck -> 2)
+  const r1 = drawFromDeck(state, state.players[0].id);
+  check("draw with low deck ok", r1 === null);
+  // Player discards — should trigger cancellation
+  const cardId = state.players[0].hand[0].id;
+  const r2 = discard(state, state.players[0].id, cardId);
+  check("discard ok", r2 === null);
+  const endStatus: string = state.status;
+  check("round cancelled on deck exhaustion", endStatus === "round_end");
+  check("cancelled lastRoundEnd reason", state.lastRoundEnd?.reason === "cancelled");
+  check("no points awarded on cancellation", state.lastRoundEnd?.pointsAwarded === 0);
+}
+
 // ---------------- Gin declaration ----------------
 section("Gin declaration");
 {

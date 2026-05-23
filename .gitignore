@@ -13,3 +13,4 @@ android/
 ios/
 .turbo/
 coverage/
+.vercel

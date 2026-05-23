@@ -33,6 +33,13 @@ export interface GameRoomState {
   round: number;
   targetScore: number;
   turnDeadlineMs: number | null;
+  /**
+   * The card the current player just took from the discard pile this turn.
+   * Cleared when the player draws from the deck or after they finish discarding.
+   * Used to enforce: you can't take a card off the discard pile and immediately
+   * put it back the same turn (per Pagat rules).
+   */
+  justTookFromDiscard: Card | null;
   lastAction?: GameActionLog;
   lastRoundEnd?: RoundEndPayload;
 }
@@ -49,6 +56,7 @@ export function createRoomState(roomCode: string): GameRoomState {
     round: 0,
     targetScore: DEFAULT_TARGET_SCORE,
     turnDeadlineMs: null,
+    justTookFromDiscard: null,
   };
 }
 
@@ -109,11 +117,10 @@ export function dealRound(state: GameRoomState, rng: () => number = Math.random)
   state.deck = deck;
   state.discard = [upcard];
   state.round += 1;
-  // Non-dealer leads. We alternate dealer by round parity, so currentTurnIdx is set
-  // before dealRound by the room manager (in advanceToNewRound).
   if (state.currentTurnIdx === null) state.currentTurnIdx = 0;
   state.turnPhase = "draw";
   state.status = "playing";
+  state.justTookFromDiscard = null;
   state.lastAction = { kind: "deal", at: Date.now() };
 }
 
@@ -127,6 +134,7 @@ export type ActionError =
   | { code: "CARD_NOT_IN_HAND" }
   | { code: "ILLEGAL_KNOCK" }
   | { code: "ILLEGAL_GIN" }
+  | { code: "JUST_TOOK_FROM_DISCARD" }
   | { code: "NOT_PLAYING" };
 
 function currentPlayer(state: GameRoomState): PlayerSlot | null {
@@ -149,6 +157,7 @@ export function drawFromDeck(state: GameRoomState, playerId: PlayerId): ActionEr
   const card = state.deck.pop()!;
   currentPlayer(state)!.hand.push(card);
   state.turnPhase = "discard";
+  state.justTookFromDiscard = null;
   state.lastAction = { kind: "draw_deck", by: playerId, at: Date.now() };
   return null;
 }
@@ -160,6 +169,7 @@ export function drawFromDiscard(state: GameRoomState, playerId: PlayerId): Actio
   const card = state.discard.pop()!;
   currentPlayer(state)!.hand.push(card);
   state.turnPhase = "discard";
+  state.justTookFromDiscard = card;
   state.lastAction = { kind: "draw_discard", by: playerId, card, at: Date.now() };
   return null;
 }
@@ -167,17 +177,45 @@ export function drawFromDiscard(state: GameRoomState, playerId: PlayerId): Actio
 export function discard(state: GameRoomState, playerId: PlayerId, cardId: string): ActionError | null {
   const err = checkTurn(state, playerId, "discard");
   if (err) return err;
+  // Pagat rule: can't take a card off the discard pile and immediately put the same card back.
+  if (state.justTookFromDiscard && state.justTookFromDiscard.id === cardId) {
+    return { code: "JUST_TOOK_FROM_DISCARD" };
+  }
   const p = currentPlayer(state)!;
   const idx = p.hand.findIndex((c) => c.id === cardId);
   if (idx < 0) return { code: "CARD_NOT_IN_HAND" };
   const [card] = p.hand.splice(idx, 1);
   state.discard.push(card);
   state.lastAction = { kind: "discard", by: playerId, card, at: Date.now() };
+  state.justTookFromDiscard = null;
   // pass turn
   state.currentTurnIdx = (state.currentTurnIdx === 0 ? 1 : 0) as 0 | 1;
   state.turnPhase = "draw";
-  // Edge case: if deck depleted to <=2 cards after pass, dead-end. Keep playing; if deck empties on draw the round is drawn.
+  // Pagat: if the deck is reduced to 2 cards after a discard (and no knock/gin),
+  // the round is cancelled — same dealer redeals, no score change.
+  if (state.deck.length <= 2) {
+    cancelRoundDueToDeckExhaustion(state);
+  }
   return null;
+}
+
+function cancelRoundDueToDeckExhaustion(state: GameRoomState) {
+  state.status = "round_end";
+  state.turnPhase = null;
+  state.justTookFromDiscard = null;
+  const p0 = state.players[0];
+  const p1 = state.players[1];
+  state.lastRoundEnd = {
+    winner: "",
+    reason: "cancelled",
+    hands: { [p0.id]: p0.hand.slice(), [p1.id]: p1.hand.slice() },
+    melds: { [p0.id]: [], [p1.id]: [] },
+    deadwood: { [p0.id]: 0, [p1.id]: 0 },
+    pointsAwarded: 0,
+    totals: { [p0.id]: p0.score, [p1.id]: p1.score },
+    matchOver: false,
+  };
+  for (const p of state.players) p.ready = false;
 }
 
 export function reorderHand(state: GameRoomState, playerId: PlayerId, order: string[]): ActionError | null {
@@ -227,6 +265,7 @@ export function declareKnockOrGin(
     return { code: "ILLEGAL_KNOCK" };
   }
   state.discard.push(discardCard);
+  state.justTookFromDiscard = null;
 
   const round = scoreRound({
     knockerHand: p.hand,

@@ -1,0 +1,12 @@
+apps/mobile
+**/node_modules
+**/dist
+**/build
+**/.expo
+**/.gradle
+android
+ios
+*.apk
+*.aab
+*.keystore
+.git

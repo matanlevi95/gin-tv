@@ -1,14 +1,70 @@
 # ג׳ין TV — Hebrew Gin Rummy (TV + Android)
 
-A 2-player Gin Rummy game where the TV is the shared table and each Android phone is a private hand/controller. Hebrew-first, RTL throughout.
+A 2-player Gin Rummy game where the TV is the shared table and each Android phone is a private hand controller. Hebrew-first, RTL throughout.
 
-**Architecture:** there is no game server of ours. The TV browser is the authority — it holds room state, validates actions, and broadcasts results. Supabase Realtime is used as a free, no-backend message bus. The phones and TV exchange messages over Supabase broadcast channels.
+**Architecture:** there is no game server of ours. The TV browser is the authority — it holds room state, validates actions, and broadcasts results. Supabase Realtime is used as a free, no-backend message bus. Phones and TV exchange messages over Supabase broadcast channels.
 
-- **TV** (`apps/tv`): React + Vite. Generates the room code + 2 per-seat tokens, shows them as QR codes, runs the game engine, broadcasts state.
-- **Mobile** (`apps/mobile`): Expo React Native (Android). QR scan → join → controller for one hand. Sends action intents over Supabase, receives state.
-- **Shared** (`shared`): TypeScript types + Gin Rummy engine (deck, melds, deadwood, scoring) + the Realtime protocol (`RoomHost` used by TV). Single source of truth for game rules.
+- **TV** (`apps/tv`): React + Vite. Persists a stable 4-char TV code in localStorage, shows a single QR + that code, runs the engine, broadcasts state.
+- **Mobile** (`apps/mobile`): Expo React Native (Android). Each phone has a profile with a list of saved TVs and a green/red online indicator. Scan QR or type the code; once joined, optionally save the TV with a label.
+- **Shared** (`shared`): Types + Gin Rummy engine (deck, melds, deadwood, scoring) + the realtime protocol (`RoomHost`).
 
 Free, no card, no server. The TV is the brain.
+
+---
+
+## Live URLs
+
+| What | URL |
+|---|---|
+| TV web app | https://gin-tv.vercel.app |
+| Android APK direct download | https://gin-tv.vercel.app/apk |
+| Android APK (GitHub Releases) | https://github.com/matanlevi95/gin-tv/releases/download/v0.1.0/gin-tv.apk |
+| Source | https://github.com/matanlevi95/gin-tv |
+
+The TV URL is your bookmark/PWA target. The APK URL is what you paste into Downloader-style apps on an Android TV, or what you send via WhatsApp.
+
+---
+
+## How to play
+
+1. Open https://gin-tv.vercel.app on the TV (browser or PWA via "Add to Home Screen").
+2. The TV shows a single QR and a 4-letter code (e.g., `79WN`). The code is **stable per TV** — it doesn't change between sessions.
+3. On each phone: open the app → **התחבר לטלוויזיה** → scan QR (or tap "הקלידו קוד ידני" and type the 4 letters).
+4. On first connect, the app offers to save the TV with a label like "סלון". Next time you open the app, you'll see "סלון 🟢" if the TV is on, "סלון 🔴" if it isn't, and you can connect with one tap.
+5. Each player taps **מוכן**. When both ready: 3-2-1 → round begins.
+6. Phone gameplay: take a card (deck or discard) → select one to discard → tap **זרוק קלף**. When eligible, **נקישה** (deadwood ≤ 10) or **ג׳ין** (deadwood = 0) light up.
+7. Round end is revealed on the TV. Tap **מוכן לסיבוב נוסף** to continue. First to 100 points wins.
+
+---
+
+## Game rules implemented
+
+Standard 2-player Gin Rummy, cross-checked against the [Pagat reference](https://www.pagat.com/rummy/ginrummy.html):
+
+- 52-card deck (no jokers), 10 cards per player, one face-up discard.
+- Turn: draw (deck or discard) → discard.
+- Set = 3–4 same rank. Run = 3+ consecutive same suit. **No K-A wrap.**
+- Card values: A=1, 2–10 face value, J/Q/K = 10.
+- **Knock**: legal when deadwood ≤ 10 after the draw.
+- **Gin**: deadwood = 0 → +25 bonus, no lay-offs.
+- **Lay-offs**: only on knock (not gin). Defender adds deadwood cards onto knocker's melds. Lay-offs can't land on knocker's deadwood and the knocker can't lay off.
+- **Undercut**: defender's deadwood (after lay-offs) ≤ knocker's → defender wins (difference + 25 bonus).
+- **No re-discard**: a card just taken from the discard pile may not be put back on the same turn.
+- **Deck-exhaustion cancellation**: when the deck is reduced to 2 cards after a discard (and no knock/gin), the round is cancelled and re-dealt with no score change.
+- Match target: **100** points.
+
+Engine has 58 unit tests; the live realtime layer has 8 end-to-end tests (against the real Supabase project).
+
+---
+
+## Connection / privacy model
+
+- Each TV has a stable 4-char code stored in its browser localStorage.
+- Phones scan the TV's single QR — that QR encodes the TV code + the project's Supabase URL + anon key.
+- Each phone generates a **fresh 32-char private token** on every connect. The phone subscribes only to `gin:<code>:player:<token>`. Because no one else knows the token, no one else can subscribe to that channel — that's the privacy boundary.
+- The phone sends a "hello" with `{ playerId, privateToken }`. The TV uses the playerId as the persistent seat key (so the same player gets the same seat on reconnect) and the privateToken as the address to send their hand updates to.
+- Up to 2 distinct `playerId`s per TV. A 3rd is rejected with "room full".
+- TV broadcasts a heartbeat every 4 seconds. Phones use this to display the online/offline dot on saved TVs.
 
 ---
 
@@ -26,20 +82,15 @@ shared/      # TS types + Gin Rummy engine + Realtime protocol
 Prerequisites: Node 20+, npm 9+.
 
 ```bash
-# from repo root
 npm install
 npm --workspace shared run build
-```
 
-Set Supabase credentials (project URL + anon key from supabase.com → Project Settings → API):
-
-```bash
-# TV (build-time env, Vite picks these up)
+# TV creds (the same Supabase project the apps already point to):
 cp apps/tv/.env.example apps/tv/.env.local
-# edit apps/tv/.env.local with your VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY
+# fill VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY from supabase.com → Project Settings → API
 ```
 
-For mobile, the same credentials are encoded into the QR by the TV — phones get them from the scan. For dev builds you can also bake defaults into `apps/mobile/app.json` → `expo.extra.supabaseUrl` / `expo.extra.supabaseAnonKey`.
+Mobile credentials are baked into `apps/mobile/app.json` under `expo.extra.supabaseUrl`/`supabaseAnonKey`. The QR a phone scans overrides these per-connection.
 
 ## Running locally
 
@@ -50,32 +101,37 @@ npm --workspace @gin-tv/tv run dev
 
 # Terminal 2 — Mobile (Expo)
 npm --workspace @gin-tv/mobile run start
-# scan with Expo Go (Android) or press 'a' to open emulator
+# scan with Expo Go (Android) or 'a' to open emulator
 ```
 
-There is no server to start. The TV connects directly to Supabase Realtime. The phones connect directly to Supabase Realtime. They communicate via broadcast channels, never through a backend of yours.
+No server to start. Both clients connect directly to Supabase Realtime.
 
-## How to play
-
-1. Open the TV app on your TV's browser (or laptop / Smart TV browser).
-2. The TV shows the title, two QR codes (one per player slot), and the 4-letter room code.
-3. Each player opens the app on their phone → **התחבר לטלוויזיה** → scan one of the QRs.
-4. The TV reveals which seat each player took (overlay on top of that QR).
-5. Each player taps **מוכן** in the lobby.
-6. When both are ready, the TV runs a 3-2-1 countdown and the round begins.
-7. Phone: take a card (deck or discard) → select one to discard → tap **זרוק קלף**.
-8. When eligible, **נקישה** (deadwood ≤ 10) or **ג׳ין** (deadwood = 0) light up.
-9. The TV reveals the round on round end. Tap **מוכן לסיבוב נוסף** to continue.
-10. First to **100** points wins the match.
-
-## Testing the engine
+## Testing
 
 ```bash
-# 50 unit checks of the game engine
-cd shared && npm test
+# Engine unit tests (58/58)
+npm --workspace shared run test
 
-# Full e2e test against the live Supabase project (simulates TV + 2 phones)
-node /tmp/test-supabase-e2e.mjs  # script in the repo's test-vault
+# Live e2e against Supabase Realtime (8/8)
+node /tmp/e2e-v2.mjs   # script lives in the repo's test-vault if you need it
+```
+
+## Build APK locally (no EAS account required)
+
+```bash
+cd apps/mobile
+JAVA_HOME=/opt/homebrew/opt/openjdk@17 \
+ANDROID_HOME=$HOME/Library/Android/sdk \
+npx expo prebuild --platform android --no-install --clean
+
+# one-time: generate a release keystore (already in repo: android/app/gin-tv.keystore)
+# build:
+cd android
+JAVA_HOME=/opt/homebrew/opt/openjdk@17 \
+ANDROID_HOME=$HOME/Library/Android/sdk \
+PATH=$JAVA_HOME/bin:$PATH:$ANDROID_HOME/platform-tools \
+./gradlew assembleRelease --no-daemon
+# output: app/build/outputs/apk/release/app-release.apk (~85MB)
 ```
 
 ## Deploy
@@ -86,64 +142,31 @@ The architecture has just two cloud pieces:
 |---|---|---|
 | TV (`apps/tv`) | Vercel Hobby | Free, no card |
 | Realtime + Auth | Supabase Free | Free, no card |
-| Mobile APK | EAS Build → WhatsApp to your phone | Free (limited monthly builds) |
+| Mobile APK | Local Gradle → WhatsApp / GitHub Releases | Free |
 
 ### TV → Vercel
 
 ```bash
-npm install -g vercel
-vercel login
-# from repo root:
-vercel link          # personal scope (skip team prompts)
-vercel env add VITE_SUPABASE_URL production       # paste your Supabase URL
-vercel env add VITE_SUPABASE_ANON_KEY production  # paste your anon key
+vercel link --yes --project gin-tv
+vercel env add VITE_SUPABASE_URL production
+vercel env add VITE_SUPABASE_ANON_KEY production
 vercel deploy --prod
-# -> https://your-tv.vercel.app
 ```
 
-The TV is fully static after build — no backend needed. Vercel free covers 100GB/month bandwidth, more than enough.
+### Samsung Tizen TV (optional)
 
-### Mobile APK → WhatsApp
+The TV app also packages as a Tizen `.wgt` (file at the repo root: `gin-tv.wgt`). Installing it requires:
 
-```bash
-npm install -g eas-cli
-cd apps/mobile
-eas login
-# (edit app.json -> expo.extra.supabaseUrl / supabaseAnonKey if you haven't already)
-eas build -p android --profile preview
-```
+1. Tizen Studio (free, 1GB+).
+2. A Samsung developer certificate (free, generated in Tizen Studio's Certificate Manager).
+3. Developer Mode enabled on the TV.
+4. Sign the .wgt with your cert and install via Tizen Studio's Device Manager.
 
-EAS returns a download URL like `https://expo.dev/artifacts/.../app.apk`. Open it in your browser, download the .apk, attach to WhatsApp → send to self → install on phone.
+The Downloader app on Tizen cannot install .wgt files — Samsung requires their official sideload path.
 
-## Game rules implemented
+## Known limitations / next steps
 
-Standard 2-player Gin Rummy:
-
-- 52-card deck (no jokers), 10 cards per player, one face-up discard.
-- Turn: draw (deck or discard) → discard.
-- Set = 3–4 same rank. Run = 3+ consecutive same suit (no Ace-K wrap).
-- Card values: A=1, 2–10 = face, J/Q/K = 10.
-- Deadwood = best non-overlapping meld arrangement (branch-and-bound).
-- Knock: legal when deadwood ≤ 10 after the draw.
-- Gin: deadwood = 0; awards +25 bonus, no lay-offs.
-- Lay-offs on knock (not gin).
-- Undercut: opponent deadwood (after lay-offs) ≤ knocker deadwood → opponent wins difference + 25.
-- Match target: 100 points.
-
-## Realtime / privacy model
-
-Each room has:
-- **Public channel** `gin:<code>:room` — TV broadcasts state, phones broadcast actions.
-- **Two private channels** `gin:<code>:player:<token>` — TV sends each player's private hand only to that player's channel.
-
-Each per-seat token is a 32-char secret generated by the TV and encoded into one of the two QRs. The phone that scans QR-A subscribes to player-A's private channel; phone B subscribes to B's. Without the token (which only the QR contains) you cannot subscribe to someone else's hand — Supabase Realtime channel names act as the access key.
-
-The TV is the **only** authority that processes actions. Phones send intents; the TV runs the shared engine and validates. Privacy of hands is enforced by Supabase channel access, not by trust in the phone.
-
-## Future work
-
-- **Supabase Auth (email + password)** — persistent profile/stats across reinstalls.
-- **Google sign-in** — second auth provider, planned after email/password is stable.
-- **Animations** — card flip on deal/discard, score count-up.
-- **Sounds** — free SFX via `expo-av`.
-- **Reconnect timeout** — kick a disconnected player after 60s and offer surrender.
+- **No login** — profiles + match history live in `AsyncStorage` per device. Supabase Auth (email + password) planned next.
+- **No reconnect timeout** — a disconnected player stalls the turn. Manual reconnect via the saved-TVs list works.
+- **No sounds** — silent for now.
+- **First-turn upcard variant** — we skip the "non-dealer chooses upcard first, then dealer" mechanic from the Pagat ruleset. Most casual players don't notice.

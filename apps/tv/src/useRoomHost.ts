@@ -3,6 +3,10 @@
  * room channel, and emits PublicGameState / RoundEndPayload via React state.
  *
  * The TV is the authority — there is no server in this architecture.
+ *
+ * Room code persistence: each TV keeps a stable 4-char code in localStorage so
+ * that phones who saved this TV in their profile can identify it across
+ * sessions. If the user wants a fresh code, they can clear localStorage.
  */
 import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -14,32 +18,50 @@ import {
   RoomHost,
   RoundEndPayload,
   generateRoomCode,
+  isValidRoomCode,
   playerChannel,
   roomChannel,
 } from "@gin-tv/shared";
 import { supabase } from "./supabase";
 
+const STORAGE_KEY = "ginTv:tvCode";
+
+function loadOrCreateTvCode(): string {
+  try {
+    const saved = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+    if (saved && isValidRoomCode(saved)) return saved;
+  } catch {}
+  const fresh = generateRoomCode();
+  try {
+    localStorage.setItem(STORAGE_KEY, fresh);
+  } catch {}
+  return fresh;
+}
+
 export interface RoomHostHandle {
   roomCode: string;
-  tokens: [string, string];
   state: PublicGameState | null;
   roundEnd: RoundEndPayload | null;
   matchEnd: { winner: string; totals: Record<string, number> } | null;
   countdown: number | null;
+  /** Reset the TV's stable code (clears localStorage). UI calls this when needed. */
+  rotateCode: () => void;
 }
 
 export function useRoomHost(): RoomHostHandle {
-  const [roomCode] = useState(() => generateRoomCode());
+  const [roomCode, setRoomCode] = useState(() => loadOrCreateTvCode());
   const [state, setState] = useState<PublicGameState | null>(null);
   const [roundEnd, setRoundEnd] = useState<RoundEndPayload | null>(null);
   const [matchEnd, setMatchEnd] = useState<RoomHostHandle["matchEnd"]>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
   const hostRef = useRef<RoomHost | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const tokensRef = useRef<[string, string] | null>(null);
+  /** One persistent sender channel per player token, so back-to-back private
+   *  emits don't collide on a transient channel that's still tearing down. */
+  const senderByToken = useRef<Map<string, { ch: RealtimeChannel; ready: Promise<void> }>>(new Map());
 
   useEffect(() => {
-    // 1. Open the room channel.
+    // 1. Open the room channel for actions + public broadcasts.
     const channel = supabase.channel(roomChannel(roomCode), {
       config: { broadcast: { self: false, ack: false } },
     });
@@ -49,7 +71,6 @@ export function useRoomHost(): RoomHostHandle {
     const host = new RoomHost(
       {
         emitPublic: (ev: PublicEvent) => {
-          // mirror into local React state
           if (ev.kind === "state") {
             setState(ev.payload);
             if (ev.payload.status === "playing") setRoundEnd(null);
@@ -61,38 +82,37 @@ export function useRoomHost(): RoomHostHandle {
             setRoundEnd(null);
             runCountdown(setCountdown);
           }
-          // broadcast to subscribers (phones)
           channel.send({ type: "broadcast", event: "public", payload: ev });
         },
         emitPrivate: (toToken: string, ev: PrivateEvent) => {
-          // Each player has their own channel; send via a freshly opened sender.
-          const ch = supabase.channel(playerChannel(roomCode, toToken), {
-            config: { broadcast: { self: false } },
-          });
-          ch.subscribe((status) => {
-            if (status === "SUBSCRIBED") {
-              ch.send({ type: "broadcast", event: "private", payload: ev }).finally(
-                () => {
-                  // Tear down — we only used it for one outbound message.
-                  supabase.removeChannel(ch);
-                }
-              );
-            }
-          });
+          let entry = senderByToken.current.get(toToken);
+          if (!entry) {
+            const ch = supabase.channel(playerChannel(roomCode, toToken), {
+              config: { broadcast: { self: false, ack: false } },
+            });
+            const ready = new Promise<void>((resolve) => {
+              ch.subscribe((status) => {
+                if (status === "SUBSCRIBED") resolve();
+              });
+            });
+            entry = { ch, ready };
+            senderByToken.current.set(toToken, entry);
+          }
+          entry.ready
+            .then(() =>
+              entry!.ch.send({ type: "broadcast", event: "private", payload: ev })
+            )
+            .catch(() => {});
         },
       },
       roomCode
     );
     hostRef.current = host;
-    tokensRef.current = host.slotTokens;
 
-    // Render the lobby immediately — don't wait for Supabase to subscribe.
     setState(host.snapshotPublic());
 
-    // 3. Listen for actions from phones on the room channel.
     channel.on("broadcast", { event: "action" }, (msg) => {
-      const ev = msg.payload as ActionEvent;
-      host.handleAction(ev);
+      host.handleAction(msg.payload as ActionEvent);
     });
 
     channel.subscribe((status) => {
@@ -108,18 +128,30 @@ export function useRoomHost(): RoomHostHandle {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
+      for (const entry of senderByToken.current.values()) {
+        try {
+          supabase.removeChannel(entry.ch);
+        } catch {}
+      }
+      senderByToken.current.clear();
     };
-    // We intentionally never re-run this effect: the room code is fixed for the page lifetime.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [roomCode]);
+
+  const rotateCode = () => {
+    const fresh = generateRoomCode();
+    try {
+      localStorage.setItem(STORAGE_KEY, fresh);
+    } catch {}
+    setRoomCode(fresh);
+  };
 
   return {
     roomCode,
-    tokens: tokensRef.current ?? ["", ""],
     state,
     roundEnd,
     matchEnd,
     countdown,
+    rotateCode,
   };
 }
 
