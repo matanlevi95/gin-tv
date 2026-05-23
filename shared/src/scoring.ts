@@ -3,6 +3,10 @@ import { applyLayoffs, bestArrangement } from "./melds";
 
 export const GIN_BONUS = 25;
 export const UNDERCUT_BONUS = 25;
+/** Awarded to the match winner once one player reaches the target score. */
+export const GAME_BONUS = 100;
+/** Additional bonus when the opponent finished the match with 0 points. */
+export const SHUTOUT_BONUS = 100;
 export const KNOCK_MAX_DEADWOOD = 10;
 export const DEFAULT_TARGET_SCORE = 100;
 

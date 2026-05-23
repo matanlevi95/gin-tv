@@ -49,6 +49,8 @@ export type { Arrangement } from "./melds";
 export {
   GIN_BONUS,
   UNDERCUT_BONUS,
+  GAME_BONUS,
+  SHUTOUT_BONUS,
   KNOCK_MAX_DEADWOOD,
   DEFAULT_TARGET_SCORE,
   scoreRound,

@@ -88,6 +88,8 @@ export interface RoundEndPayload {
   melds: Record<PlayerId, Meld[]>;
   deadwood: Record<PlayerId, number>;
   pointsAwarded: number;
+  /** Match-end bonuses applied to the winner; only set when matchOver=true. */
+  bonuses?: { gameBonus: number; shutoutBonus: number };
   totals: Record<PlayerId, number>;
   matchOver: boolean;
 }
@@ -228,6 +230,10 @@ export const HE = {
   connecting: "מתחבר…",
   noSavedTvs: "עוד לא חיברת טלוויזיה",
   scanQrToBegin: "סרוק QR או הקלד קוד כדי להתחיל",
+  // End-of-match bonuses
+  gameBonusLabel: "בונוס ניצחון",
+  shutoutBonusLabel: "בונוס סקאנק",
+  matchWinner: "המנצח במשחק",
 } as const;
 
 export type HebrewKey = keyof typeof HE;

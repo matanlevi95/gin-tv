@@ -1,0 +1,285 @@
+/* ===================================================================
+   20 animations / effects for ג׳ין TV.
+   Each block is annotated with a number so we can audit coverage.
+   =================================================================== */
+
+/* 1. Ambient felt breathing — the table gradient very slowly pulses. */
+.table {
+  background-size: 200% 200%;
+  animation: feltBreathe 14s ease-in-out infinite;
+}
+@keyframes feltBreathe {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* 2. Title gold shimmer on the lobby. */
+.title .accent {
+  background: linear-gradient(90deg, #d4a85b 0%, #fff2c7 30%, #d4a85b 60%, #fff2c7 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: titleShimmer 4s linear infinite;
+}
+@keyframes titleShimmer {
+  0%   { background-position: 0% center; }
+  100% { background-position: -200% center; }
+}
+
+/* 3. QR gentle pulse to draw attention. */
+.qr-frame {
+  animation: qrPulse 2.6s ease-in-out infinite;
+}
+@keyframes qrPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(212, 168, 91, 0); }
+  50%      { transform: scale(1.015); box-shadow: 0 0 40px rgba(212, 168, 91, 0.35); }
+}
+
+/* 4. Room-code gold drift — soft glow that travels left to right. */
+.room-code {
+  position: relative;
+  overflow: hidden;
+}
+.room-code::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 240, 200, 0.35) 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: codeDrift 5s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes codeDrift {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* 5. Lobby card subtle float. */
+.lobby-card {
+  animation: cardFloat 6s ease-in-out infinite;
+}
+@keyframes cardFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* 6. Player-chip ready dot — soft glow when ready. */
+.player-chip.ready .ready-dot {
+  animation: readyPulse 1.4s ease-in-out infinite;
+}
+@keyframes readyPulse {
+  0%, 100% { box-shadow: 0 0 6px var(--accent); transform: scale(1); }
+  50%      { box-shadow: 0 0 18px var(--accent); transform: scale(1.25); }
+}
+
+/* 7. Turn banner premium glow pulse (replaces the simpler turnPulse). */
+.turn-banner.glow {
+  animation: turnGlow 1.8s ease-in-out infinite;
+}
+@keyframes turnGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 10px rgba(255, 209, 102, 0.3),
+      inset 0 0 0 1px rgba(255, 209, 102, 0.3);
+    border-color: rgba(255, 209, 102, 0.6);
+  }
+  50% {
+    box-shadow:
+      0 0 38px rgba(255, 209, 102, 0.85),
+      0 0 60px rgba(255, 209, 102, 0.35),
+      inset 0 0 0 1px rgba(255, 209, 102, 0.8);
+    border-color: var(--gold);
+  }
+}
+
+/* 8. Card deal-in — when state.status becomes "playing", cards fall into place. */
+.card.deal-in {
+  animation: dealIn 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2) backwards;
+}
+@keyframes dealIn {
+  0%   { transform: translate(0, -260px) rotate(-18deg); opacity: 0; }
+  60%  { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0); opacity: 1; }
+}
+
+/* 9. Card draw-into-hand. */
+.card.draw-in {
+  animation: drawIn 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+}
+@keyframes drawIn {
+  0%   { transform: translateY(-80px) scale(0.85); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* 10. Card discard-out — slides toward the discard pile and fades. */
+.card.discard-out {
+  animation: discardOut 0.4s cubic-bezier(0.4, 0, 0.6, 1) forwards;
+}
+@keyframes discardOut {
+  0%   { transform: translateY(0) rotate(0); opacity: 1; }
+  100% { transform: translate(60px, 60px) rotate(8deg); opacity: 0; }
+}
+
+/* 11. Center-area discard receives a card — quick scale-in pop. */
+.discard-spot .card.just-received {
+  animation: pileReceive 0.4s ease-out;
+}
+@keyframes pileReceive {
+  0%   { transform: scale(1.18) rotate(4deg); box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* 12. Deck stack micro-jitter when a player draws from it. */
+.deck-stack.drew {
+  animation: deckJitter 0.35s ease;
+}
+@keyframes deckJitter {
+  0%   { transform: translateX(0); }
+  30%  { transform: translateX(-3px) rotate(-2deg); }
+  60%  { transform: translateX(2px) rotate(1deg); }
+  100% { transform: translateX(0); }
+}
+
+/* 13. Empty-deck warning — pulsing amber border when deck is running low. */
+.deck-stack.low::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 18px;
+  border: 2px solid #d4a85b;
+  animation: lowDeckPulse 1.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes lowDeckPulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50%      { opacity: 1;   transform: scale(1.06); }
+}
+
+/* 14. Score count-up — when number changes, gentle pop. */
+.score-tick {
+  animation: scoreTick 0.55s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+@keyframes scoreTick {
+  0%   { transform: scale(1); color: var(--gold-soft); }
+  40%  { transform: scale(1.45); color: var(--accent); text-shadow: 0 0 18px var(--accent); }
+  100% { transform: scale(1); color: var(--gold-soft); }
+}
+
+/* 15. Gin announcement burst — bright gold radial flash on the round-end overlay. */
+.overlay.gin::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255, 215, 130, 0.6) 0%, transparent 60%);
+  animation: ginBurst 1.4s ease-out;
+  pointer-events: none;
+}
+@keyframes ginBurst {
+  0%   { opacity: 0; transform: scale(0.7); }
+  40%  { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+
+/* 16. Knock ripple — bronze concentric ring on the result card. */
+.overlay.knock .result-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+  border: 3px solid var(--gold);
+  animation: knockRipple 1.2s ease-out;
+  pointer-events: none;
+}
+@keyframes knockRipple {
+  0%   { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0;   transform: scale(1.15); }
+}
+
+/* 17. Undercut shake — for the dramatic reversal. */
+.overlay.undercut .result-card {
+  animation: undercutShake 0.55s cubic-bezier(0.3, 0.8, 0.4, 1);
+}
+@keyframes undercutShake {
+  0%, 100% { transform: translateX(0); }
+  15%  { transform: translateX(-10px) rotate(-1deg); }
+  30%  { transform: translateX(8px) rotate(1deg); }
+  45%  { transform: translateX(-6px) rotate(-0.5deg); }
+  60%  { transform: translateX(4px); }
+  75%  { transform: translateX(-2px); }
+}
+
+/* 18. Round-end card flip reveal — each card flips from back to face. */
+.result-hands .card {
+  animation: flipReveal 0.7s cubic-bezier(0.4, 0, 0.2, 1) backwards;
+  transform-origin: center;
+  transform-style: preserve-3d;
+}
+.result-hands .hand-row > :nth-child(1)  { animation-delay: 0.05s; }
+.result-hands .hand-row > :nth-child(2)  { animation-delay: 0.10s; }
+.result-hands .hand-row > :nth-child(3)  { animation-delay: 0.15s; }
+.result-hands .hand-row > :nth-child(4)  { animation-delay: 0.20s; }
+.result-hands .hand-row > :nth-child(5)  { animation-delay: 0.25s; }
+.result-hands .hand-row > :nth-child(6)  { animation-delay: 0.30s; }
+.result-hands .hand-row > :nth-child(7)  { animation-delay: 0.35s; }
+.result-hands .hand-row > :nth-child(8)  { animation-delay: 0.40s; }
+.result-hands .hand-row > :nth-child(9)  { animation-delay: 0.45s; }
+.result-hands .hand-row > :nth-child(10) { animation-delay: 0.50s; }
+@keyframes flipReveal {
+  0%   { transform: rotateY(180deg) translateY(20px); opacity: 0; }
+  50%  { opacity: 1; }
+  100% { transform: rotateY(0) translateY(0); opacity: 1; }
+}
+
+/* 19. Countdown number entry — big premium bounce. */
+.countdown {
+  animation: countdownPop 0.7s cubic-bezier(0.25, 1.6, 0.4, 1);
+}
+@keyframes countdownPop {
+  0%   { transform: scale(0.2) rotate(-12deg); opacity: 0; filter: blur(8px); }
+  50%  { transform: scale(1.15) rotate(2deg); opacity: 1; filter: blur(0); }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+/* 20. Match-end confetti — animated SVG-less particles via box-shadow burst. */
+.match-end-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 80;
+}
+.match-end-confetti .piece {
+  position: absolute;
+  top: -10vh;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0.95;
+  animation: confettiFall 3.5s linear forwards;
+}
+@keyframes confettiFall {
+  0%   { transform: translate3d(0, 0, 0) rotate(0); opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translate3d(var(--x, 60px), 110vh, 0) rotate(720deg); opacity: 0; }
+}
+
+/* Bonus 21. Lobby "waiting" subtle ellipsis pulse on player-chip placeholders. */
+.player-chip[style*="opacity: 0.45"] .ready-label,
+.player-chip[style*="opacity:0.45"] .ready-label {
+  animation: waitingDots 1.6s ease-in-out infinite;
+}
+@keyframes waitingDots {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* Bonus 22. Background warm corner lighting drift. */
+.table::after {
+  animation: rimLightDrift 18s ease-in-out infinite;
+}
+@keyframes rimLightDrift {
+  0%, 100% { opacity: 1; transform: translateY(0); }
+  50%      { opacity: 0.85; transform: translateY(6px); }
+}

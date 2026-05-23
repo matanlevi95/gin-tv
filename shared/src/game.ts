@@ -1,6 +1,12 @@
 import { buildDeck, shuffle } from "./cards";
 import { bestArrangement } from "./melds";
-import { scoreRound, KNOCK_MAX_DEADWOOD, DEFAULT_TARGET_SCORE } from "./scoring";
+import {
+  scoreRound,
+  KNOCK_MAX_DEADWOOD,
+  DEFAULT_TARGET_SCORE,
+  GAME_BONUS,
+  SHUTOUT_BONUS,
+} from "./scoring";
 import {
   Card,
   GameActionLog,
@@ -276,9 +282,24 @@ export function declareKnockOrGin(
   const winnerId = round.winner === "knocker" ? p.id : opp.id;
   const loserId = round.winner === "knocker" ? opp.id : p.id;
   const winnerSlot = state.players.find((x) => x.id === winnerId)!;
+  const loserSlot = state.players.find((x) => x.id === loserId)!;
   winnerSlot.score += round.points;
 
+  // End-of-match bonuses (canonical Bicycle / Wikipedia rules):
+  //   • Game bonus: +100 to the match winner for reaching the target first.
+  //   • Shutout (skunk) bonus: an additional +100 if the loser ends with 0.
+  // We record them in `bonuses` so the UI can show "+100 ניצחון משחק" separately.
   const matchOver = winnerSlot.score >= state.targetScore;
+  let gameBonus = 0;
+  let shutoutBonus = 0;
+  if (matchOver) {
+    gameBonus = GAME_BONUS;
+    winnerSlot.score += gameBonus;
+    if (loserSlot.score === 0) {
+      shutoutBonus = SHUTOUT_BONUS;
+      winnerSlot.score += shutoutBonus;
+    }
+  }
   state.status = matchOver ? "match_end" : "round_end";
   state.turnPhase = null;
 
@@ -299,6 +320,7 @@ export function declareKnockOrGin(
       [opp.id]: round.opponentDeadwoodAfter,
     },
     pointsAwarded: round.points,
+    bonuses: matchOver ? { gameBonus, shutoutBonus } : undefined,
     totals: {
       [state.players[0].id]: state.players[0].score,
       [state.players[1].id]: state.players[1].score,

@@ -434,6 +434,103 @@ section("Gin declaration");
   }
 }
 
+// ---------------- Match-end bonuses ----------------
+section("Match-end bonuses (game + shutout)");
+{
+  const state = createRoomState("TEST");
+  state.players.push({ id: "p1", name: "A", score: 95, ready: true, connected: true, hand: [] });
+  state.players.push({ id: "p2", name: "B", score: 0, ready: true, connected: true, hand: [] });
+  // Set up a gin-able hand for p1
+  state.status = "playing";
+  state.currentTurnIdx = 0;
+  state.turnPhase = "discard";
+  state.players[0].hand = [
+    makeCard("S", "3"), makeCard("S", "4"), makeCard("S", "5"),
+    makeCard("H", "8"), makeCard("D", "8"), makeCard("C", "8"),
+    makeCard("H", "J"), makeCard("D", "J"), makeCard("C", "J"), makeCard("S", "J"),
+    makeCard("D", "2"),
+  ];
+  state.players[1].hand = [
+    makeCard("S", "K"), makeCard("H", "K"), makeCard("D", "Q"),
+    makeCard("C", "Q"), makeCard("S", "10"), makeCard("D", "9"),
+    makeCard("C", "7"), makeCard("H", "6"), makeCard("S", "2"), makeCard("D", "5"),
+  ];
+
+  const res = declareKnockOrGin(state, "p1", "D2", "gin");
+  if ("code" in res) {
+    check("gin with bonuses accepted", false, res);
+  } else {
+    check("match over (95 + gin → past 100)", res.payload.matchOver === true);
+    check("bonuses present", !!res.payload.bonuses);
+    check("game bonus = 100", res.payload.bonuses?.gameBonus === 100);
+    check("shutout bonus = 100 (opp was at 0)", res.payload.bonuses?.shutoutBonus === 100);
+    const expectedTotal = 95 + res.payload.pointsAwarded + 100 + 100;
+    check("winner total = baseline + round + game + shutout", res.payload.totals["p1"] === expectedTotal);
+  }
+}
+
+// Same scenario but opponent has > 0 → no shutout
+section("Match-end: game bonus without shutout");
+{
+  const state = createRoomState("TEST");
+  state.players.push({ id: "p1", name: "A", score: 95, ready: true, connected: true, hand: [] });
+  state.players.push({ id: "p2", name: "B", score: 30, ready: true, connected: true, hand: [] });
+  state.status = "playing";
+  state.currentTurnIdx = 0;
+  state.turnPhase = "discard";
+  state.players[0].hand = [
+    makeCard("S", "3"), makeCard("S", "4"), makeCard("S", "5"),
+    makeCard("H", "8"), makeCard("D", "8"), makeCard("C", "8"),
+    makeCard("H", "J"), makeCard("D", "J"), makeCard("C", "J"), makeCard("S", "J"),
+    makeCard("D", "2"),
+  ];
+  state.players[1].hand = [
+    makeCard("S", "K"), makeCard("H", "K"), makeCard("D", "Q"),
+    makeCard("C", "Q"), makeCard("S", "10"), makeCard("D", "9"),
+    makeCard("C", "7"), makeCard("H", "6"), makeCard("S", "2"), makeCard("D", "5"),
+  ];
+  const res = declareKnockOrGin(state, "p1", "D2", "gin");
+  if ("code" in res) {
+    check("gin accepted", false, res);
+  } else {
+    check("match over", res.payload.matchOver === true);
+    check("game bonus 100", res.payload.bonuses?.gameBonus === 100);
+    check("no shutout (opp had 30)", res.payload.bonuses?.shutoutBonus === 0);
+  }
+}
+
+// Not yet at target — no match end, no bonuses
+section("Below target: no match-end bonuses");
+{
+  const state = createRoomState("TEST");
+  state.players.push({ id: "p1", name: "A", score: 10, ready: true, connected: true, hand: [] });
+  state.players.push({ id: "p2", name: "B", score: 0, ready: true, connected: true, hand: [] });
+  state.status = "playing";
+  state.currentTurnIdx = 0;
+  state.turnPhase = "discard";
+  // p1: gin hand
+  state.players[0].hand = [
+    makeCard("S", "3"), makeCard("S", "4"), makeCard("S", "5"),
+    makeCard("H", "8"), makeCard("D", "8"), makeCard("C", "8"),
+    makeCard("H", "J"), makeCard("D", "J"), makeCard("C", "J"), makeCard("S", "J"),
+    makeCard("D", "2"),
+  ];
+  // p2: fully melded so deadwood ~= 0 → p1 only gets 25 gin bonus, total = 35, well below 100
+  state.players[1].hand = [
+    makeCard("S", "A"), makeCard("S", "2"), makeCard("S", "3"),
+    makeCard("H", "5"), makeCard("D", "5"), makeCard("C", "5"),
+    makeCard("H", "9"), makeCard("D", "9"), makeCard("C", "9"),
+    makeCard("S", "9"),
+  ];
+  const res = declareKnockOrGin(state, "p1", "D2", "gin");
+  if ("code" in res) {
+    check("gin accepted", false, res);
+  } else {
+    check("not yet match-over", res.payload.matchOver === false, res.payload);
+    check("no bonuses below target", res.payload.bonuses === undefined);
+  }
+}
+
 // ---------------- Summary ----------------
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

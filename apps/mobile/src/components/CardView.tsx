@@ -1,5 +1,11 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { StyleSheet, Text, View, ViewStyle } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import type { Card as CardT, Suit } from "@gin-tv/shared";
 import { theme } from "../theme";
 
@@ -17,13 +23,24 @@ interface Props {
 export function CardView({ card, size = "md", selected, style, faded }: Props) {
   const red = SUIT_RED[card.suit];
   const dims = size === "lg" ? L : size === "sm" ? S : M;
+  // Spring-lift the selected card with a slight rotation for life.
+  const lift = useSharedValue(0);
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    lift.value = withSpring(selected ? -22 : 0, { damping: 14, stiffness: 220 });
+    scale.value = withTiming(selected ? 1.06 : 1, { duration: 180 });
+  }, [selected, lift, scale]);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: lift.value }, { scale: scale.value }],
+  }));
   return (
-    <View
+    <Animated.View
       style={[
         styles.card,
         { width: dims.w, height: dims.h, borderRadius: dims.r },
         selected && styles.selected,
         faded && { opacity: 0.5 },
+        animatedStyle,
         style,
       ]}
     >
@@ -51,7 +68,7 @@ export function CardView({ card, size = "md", selected, style, faded }: Props) {
           {SUIT_GLYPH[card.suit]}
         </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -94,12 +111,11 @@ const styles = StyleSheet.create({
   selected: {
     borderColor: theme.gold,
     borderWidth: 3,
-    transform: [{ translateY: -16 }],
     shadowColor: theme.gold,
     shadowOpacity: 0.85,
-    shadowRadius: 12,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 0 },
-    elevation: 12,
+    elevation: 14,
   },
   cornerTop: { position: "absolute", top: 4, right: 4, alignItems: "center" },
   cornerBot: {

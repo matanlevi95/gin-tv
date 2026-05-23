@@ -471,3 +471,43 @@ button {
 }
 
 .tiny-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.bonus-chip {
+  background: rgba(212, 168, 91, 0.15);
+  border: 1px solid var(--gold);
+  color: var(--gold-soft);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.bonus-chip.danger {
+  background: rgba(200, 85, 61, 0.15);
+  border-color: var(--danger);
+  color: #f3a795;
+}
+.bonus-chip b {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+/* Discard pile stacking — show up to 3 cards underneath the top */
+.discard-spot {
+  position: relative;
+}
+.discard-spot .pile-underlay {
+  position: absolute;
+  width: 110px;
+  height: 156px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f0e3bd, #e0d29e);
+  border: 1.5px solid #c2a96b;
+  opacity: 0.4;
+}
+.discard-spot .pile-underlay.u1 { transform: translate(2px, 2px) rotate(-2deg); }
+.discard-spot .pile-underlay.u2 { transform: translate(-2px, 4px) rotate(1.5deg); }
+.discard-spot .pile-underlay.u3 { transform: translate(1px, -1px) rotate(-1deg); }
+

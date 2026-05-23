@@ -1,6 +1,7 @@
 import React from "react";
 import { HE, RoundEndPayload, PublicGameState } from "@gin-tv/shared";
 import { Card } from "./Card";
+import { Confetti } from "./Confetti";
 
 interface Props {
   payload: RoundEndPayload;
@@ -24,8 +25,15 @@ export function RoundEnd({ payload, state }: Props) {
   const winner = state.players.find((p) => p.id === payload.winner);
   const winnerName = winner?.name ?? "";
 
+  const overlayClass =
+    payload.reason === "gin" ? "overlay gin" :
+    payload.reason === "knock" ? "overlay knock" :
+    payload.reason === "undercut" ? "overlay undercut" :
+    "overlay";
+
   return (
-    <div className="overlay">
+    <div className={overlayClass}>
+      {payload.matchOver && <Confetti count={120} />}
       <div className="result-card">
         <h2>
           {HE.winner}: {winnerName}{" "}
@@ -33,6 +41,18 @@ export function RoundEnd({ payload, state }: Props) {
           {payload.reason === "undercut" && <span style={{ color: "var(--danger)" }}>· {HE.undercut}</span>}
         </h2>
         <div className="points">+{payload.pointsAwarded} {HE.pointsGained}</div>
+        {payload.bonuses && (
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 10, flexWrap: "wrap" }}>
+            <div className="bonus-chip">
+              <span>{HE.gameBonusLabel}</span> <b>+{payload.bonuses.gameBonus}</b>
+            </div>
+            {payload.bonuses.shutoutBonus > 0 && (
+              <div className="bonus-chip danger">
+                <span>{HE.shutoutBonusLabel}</span> <b>+{payload.bonuses.shutoutBonus}</b>
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ marginTop: 8, color: "var(--text-dim)" }}>
           {HE.round}: {state.round} · {HE.target} {state.targetScore}
         </div>
@@ -60,8 +80,8 @@ export function RoundEnd({ payload, state }: Props) {
           })}
         </div>
 
-        <div style={{ marginTop: 18, color: "var(--text-dim)", textAlign: "center" }}>
-          {payload.matchOver ? HE.matchOver : `${HE.nextRound} — לחצו ${HE.readyNext} בנייד`}
+        <div style={{ marginTop: 18, color: payload.matchOver ? "var(--gold)" : "var(--text-dim)", textAlign: "center", fontSize: payload.matchOver ? 22 : 14, fontWeight: payload.matchOver ? 800 : 400 }}>
+          {payload.matchOver ? `🏆 ${HE.matchWinner}: ${winnerName}` : `${HE.nextRound} — לחצו ${HE.readyNext} בנייד`}
         </div>
       </div>
     </div>

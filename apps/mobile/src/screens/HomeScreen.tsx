@@ -1,5 +1,12 @@
 import React, { useEffect } from "react";
 import { Alert, StyleSheet, Text, TouchableOpacity, View, ScrollView } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { HE } from "@gin-tv/shared";
@@ -86,27 +93,15 @@ export function HomeScreen({ navigation }: Props) {
           </View>
         )}
 
-        {profile.tvs.map((tv) => {
-          const status = tvStatuses[tv.code] ?? "checking";
-          return (
-            <TouchableOpacity
-              key={tv.code}
-              style={[styles.tvTile, status === "online" && styles.tvTileOnline, status === "offline" && styles.tvTileOffline]}
-              activeOpacity={0.85}
-              onPress={() => connectToTV(tv)}
-              onLongPress={() => longPressRemove(tv)}
-            >
-              <View style={[styles.tvDot, statusStyle(status)]} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.tvLabel}>{tv.label}</Text>
-                <Text style={styles.tvCode}>קוד: {tv.code}</Text>
-              </View>
-              <Text style={styles.tvStatusText}>
-                {status === "online" ? HE.tvOnline : status === "offline" ? HE.tvOffline : "בודק…"}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        {profile.tvs.map((tv) => (
+          <SavedTVRow
+            key={tv.code}
+            tv={tv}
+            status={tvStatuses[tv.code] ?? "checking"}
+            onConnect={connectToTV}
+            onLongPress={longPressRemove}
+          />
+        ))}
 
         <TouchableOpacity
           style={styles.primaryBtn}
@@ -126,10 +121,77 @@ export function HomeScreen({ navigation }: Props) {
   );
 }
 
+function SavedTVRow({
+  tv,
+  status,
+  onConnect,
+  onLongPress,
+}: {
+  tv: SavedTV;
+  status: string;
+  onConnect: (tv: SavedTV) => void;
+  onLongPress: (tv: SavedTV) => void;
+}) {
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    if (status === "online") {
+      pulse.value = withRepeat(
+        withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      );
+    } else {
+      pulse.value = withTiming(0, { duration: 200 });
+    }
+  }, [status, pulse]);
+  const dotStyle = useAnimatedStyle(() => {
+    if (status !== "online") return {};
+    return {
+      transform: [{ scale: 1 + 0.4 * pulse.value }],
+      opacity: 0.7 + 0.3 * pulse.value,
+    };
+  });
+  return (
+    <TouchableOpacity
+      style={[styles.tvTile, status === "online" && styles.tvTileOnline, status === "offline" && styles.tvTileOffline]}
+      activeOpacity={0.85}
+      onPress={() => onConnect(tv)}
+      onLongPress={() => onLongPress(tv)}
+    >
+      <View style={{ position: "relative", width: 14, height: 14 }}>
+        <View style={[styles.tvDot, statusStyle(status)]} />
+        {status === "online" && (
+          <Animated.View
+            style={[
+              {
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: 14,
+                height: 14,
+                borderRadius: 7,
+                backgroundColor: theme.accent,
+              },
+              dotStyle,
+            ]}
+          />
+        )}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.tvLabel}>{tv.label}</Text>
+        <Text style={styles.tvCode}>קוד: {tv.code}</Text>
+      </View>
+      <Text style={styles.tvStatusText}>
+        {status === "online" ? HE.tvOnline : status === "offline" ? HE.tvOffline : "בודק…"}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 function statusStyle(status: string) {
   switch (status) {
     case "online":
-      return { backgroundColor: theme.accent, shadowColor: theme.accent, shadowOpacity: 0.7, shadowRadius: 6 };
+      return { backgroundColor: theme.accent };
     case "offline":
       return { backgroundColor: theme.danger };
     default:

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { HE, PublicGameState } from "@gin-tv/shared";
 import { Card, CardBack } from "./Card";
 
@@ -7,14 +7,74 @@ interface Props {
   message?: string;
 }
 
+/** Score number that briefly animates with a pop when its value changes. */
+function ScoreBadge({ score }: { score: number }) {
+  const [pop, setPop] = useState(false);
+  const prev = useRef(score);
+  useEffect(() => {
+    if (prev.current !== score) {
+      setPop(true);
+      const t = setTimeout(() => setPop(false), 600);
+      prev.current = score;
+      return () => clearTimeout(t);
+    }
+  }, [score]);
+  return (
+    <span className={`badge-score ${pop ? "score-tick" : ""}`}>{score}</span>
+  );
+}
+
+/** Tracks the last-action timestamp; returns true for ~400ms after a deck draw. */
+function useDeckJitter(state: PublicGameState) {
+  const [shake, setShake] = useState(false);
+  const lastAt = useRef(0);
+  useEffect(() => {
+    const at = state.lastAction?.at ?? 0;
+    if (at && at !== lastAt.current && state.lastAction?.kind === "draw_deck") {
+      setShake(true);
+      const t = setTimeout(() => setShake(false), 400);
+      lastAt.current = at;
+      return () => clearTimeout(t);
+    }
+    if (at) lastAt.current = at;
+  }, [state.lastAction]);
+  return shake;
+}
+
+/** True for ~400ms after a discard action lands. */
+function useDiscardPop(state: PublicGameState) {
+  const [pop, setPop] = useState(false);
+  const lastAt = useRef(0);
+  useEffect(() => {
+    const at = state.lastAction?.at ?? 0;
+    if (
+      at &&
+      at !== lastAt.current &&
+      (state.lastAction?.kind === "discard" ||
+        state.lastAction?.kind === "knock" ||
+        state.lastAction?.kind === "gin")
+    ) {
+      setPop(true);
+      const t = setTimeout(() => setPop(false), 400);
+      lastAt.current = at;
+      return () => clearTimeout(t);
+    }
+    if (at) lastAt.current = at;
+  }, [state.lastAction]);
+  return pop;
+}
+
 export function TableView({ state, message }: Props) {
   const [p1, p2] = state.players;
   const currentName =
     state.players.find((pp) => pp.id === state.currentTurn)?.name ?? "";
+  const deckShake = useDeckJitter(state);
+  const discardPop = useDiscardPop(state);
+  const lowDeck = state.deckCount > 0 && state.deckCount < 8;
 
   return (
     <>
-      {/* Top-right corner: room code (for late joins/reconnect) */}
+      {/* Top-right corner: room code */}
       <div className="corner top-right">
         <h3>{HE.roomCode}</h3>
         <div className="big">{state.roomCode}</div>
@@ -44,12 +104,11 @@ export function TableView({ state, message }: Props) {
               {p.id === state.currentTurn ? "▸ " : ""}
               {p.name}
             </span>
-            <span className="badge-score">{p.score}</span>
+            <ScoreBadge score={p.score} />
           </div>
         ))}
       </div>
 
-      {/* Opponent (top player) - face-down hand strip */}
       {p2 && (
         <PlayerStrip
           name={p2.name}
@@ -70,7 +129,7 @@ export function TableView({ state, message }: Props) {
       {/* Center play area */}
       <div className="center-play">
         <div className="deck-spot">
-          <div className="deck-stack">
+          <div className={`deck-stack ${deckShake ? "drew" : ""} ${lowDeck ? "low" : ""}`}>
             {state.deckCount > 0 && <CardBack />}
             {state.deckCount > 1 && <CardBack />}
             {state.deckCount > 2 && <CardBack />}
@@ -80,15 +139,30 @@ export function TableView({ state, message }: Props) {
         </div>
 
         <div className="discard-spot">
-          {state.discardTop ? <Card card={state.discardTop} /> : (
+          {/* underlay cards to show the pile has depth */}
+          {state.discardCount > 1 && <div className="pile-underlay u1" />}
+          {state.discardCount > 2 && <div className="pile-underlay u2" />}
+          {state.discardCount > 3 && <div className="pile-underlay u3" />}
+          {state.discardTop ? (
+            <Card card={{ ...state.discardTop }} small={false} />
+          ) : (
             <div className="card" style={{ visibility: "hidden" }} />
+          )}
+          {discardPop && state.discardTop && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                animation: "pileReceive 0.4s ease-out",
+              }}
+            />
           )}
           <div className="label">{HE.discardPile}</div>
           <div className="deck-count">{state.discardCount}</div>
         </div>
       </div>
 
-      {/* Turn banner */}
       {state.currentTurn && (
         <div className={`turn-banner glow`}>
           ▸ {currentName} — {HE.yourTurn}
@@ -120,13 +194,19 @@ function PlayerStrip({
       <div
         style={{
           display: "flex",
-          gap: -34 as any,
           justifyContent: "center",
           marginBottom: 8,
         }}
       >
         {Array.from({ length: cardCount }).map((_, i) => (
-          <div key={i} style={{ marginLeft: -34 }}>
+          <div
+            key={i}
+            className="deal-in"
+            style={{
+              marginLeft: -34,
+              animationDelay: `${0.04 * i}s`,
+            }}
+          >
             <CardBack small />
           </div>
         ))}

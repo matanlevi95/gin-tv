@@ -7,6 +7,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  withSequence,
+  Easing,
+} from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -128,6 +136,41 @@ export function HandScreen({ navigation }: Props) {
     [handCards, localOrder]
   );
 
+  // Pulse the "your turn" pill while it's your turn.
+  const turnPulse = useSharedValue(0);
+  useEffect(() => {
+    if (isMyTurn) {
+      turnPulse.value = withRepeat(
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.ease) }),
+        -1,
+        true
+      );
+    } else {
+      turnPulse.value = withTiming(0, { duration: 200 });
+    }
+  }, [isMyTurn, turnPulse]);
+  const turnPulseStyle = useAnimatedStyle(() => ({
+    opacity: 0.5 + 0.5 * turnPulse.value,
+    transform: [{ scale: 1 + 0.06 * turnPulse.value }],
+  }));
+
+  // Score pop when my score changes.
+  const myScorePop = useSharedValue(1);
+  const lastMyScore = React.useRef(me?.score ?? 0);
+  useEffect(() => {
+    const s = me?.score ?? 0;
+    if (s !== lastMyScore.current) {
+      myScorePop.value = withSequence(
+        withTiming(1.4, { duration: 180 }),
+        withTiming(1, { duration: 220 })
+      );
+      lastMyScore.current = s;
+    }
+  }, [me?.score, myScorePop]);
+  const myScorePopStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: myScorePop.value }],
+  }));
+
   if (!publicState || !privateState || !me) {
     return (
       <SafeAreaView style={styles.root}>
@@ -149,18 +192,38 @@ export function HandScreen({ navigation }: Props) {
             {opp?.name ?? HE.opponent}: <Text style={styles.score}>{opp?.score ?? 0}</Text>
           </Text>
           <Text style={styles.myLine}>
-            {HE.you}: <Text style={styles.score}>{me.score}</Text>
+            {HE.you}: <Animated.Text style={[styles.score, myScorePopStyle]}>{me.score}</Animated.Text>
           </Text>
         </View>
         <View style={styles.turnBox}>
-          <Text style={[styles.turnText, { color: isMyTurn ? theme.gold : theme.textDim }]}>
-            {isMyTurn ? HE.yourTurn : HE.opponentsTurn}
-          </Text>
-          {isMyTurn && (
-            <Text style={styles.phaseText}>
-              {phase === "draw" ? "קח קלף" : "זרוק קלף"}
+          <View style={{ position: "relative", alignItems: "flex-end" }}>
+            {isMyTurn && (
+              <Animated.View
+                style={[
+                  {
+                    position: "absolute",
+                    top: -6,
+                    left: -10,
+                    right: -10,
+                    bottom: -6,
+                    borderRadius: 14,
+                    backgroundColor: "rgba(212, 168, 91, 0.18)",
+                    borderWidth: 1,
+                    borderColor: theme.gold,
+                  },
+                  turnPulseStyle,
+                ]}
+              />
+            )}
+            <Text style={[styles.turnText, { color: isMyTurn ? theme.gold : theme.textDim }]}>
+              {isMyTurn ? HE.yourTurn : HE.opponentsTurn}
             </Text>
-          )}
+            {isMyTurn && (
+              <Text style={styles.phaseText}>
+                {phase === "draw" ? "קח קלף" : "זרוק קלף"}
+              </Text>
+            )}
+          </View>
         </View>
       </View>
 
