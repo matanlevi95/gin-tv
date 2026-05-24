@@ -8,6 +8,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Dimensions,
   StyleSheet,
   Text,
@@ -49,9 +50,26 @@ import { RootStackParamList } from "../../../../App";
 type Props = NativeStackScreenProps<RootStackParamList, "Hand">;
 
 const SCREEN_W = Dimensions.get("window").width;
-const CARD_W = 62;
-const CARD_H = 90;
-const CARD_OVERLAP = 38; // Yaniv hands are smaller (5-7), so wider visible per card
+const CARDS_PER_ROW = 6;
+const SIDE_PAD = 12;
+const COL_GAP = 4;
+const ROW_GAP = 14;
+const CARD_W = Math.floor(
+  (SCREEN_W - SIDE_PAD * 2 - COL_GAP * (CARDS_PER_ROW - 1)) / CARDS_PER_ROW
+);
+const CARD_H = Math.round(CARD_W * 1.45);
+
+function indexToGrid(i: number) {
+  const row = Math.floor(i / CARDS_PER_ROW);
+  const col = i % CARDS_PER_ROW;
+  return { row, col };
+}
+function gridToXY(row: number, col: number) {
+  return {
+    x: SIDE_PAD + col * (CARD_W + COL_GAP),
+    y: row * (CARD_H + ROW_GAP),
+  };
+}
 
 export function YanivHandScreen({ navigation }: Props) {
   const { publicState, privateState, playerId, sendGameAction, errorMessage, lastRoundEnd } =
@@ -176,8 +194,15 @@ export function YanivHandScreen({ navigation }: Props) {
   const canDrawDeck = isMyTurn && phase === "draw";
   const canDrawDiscard = isMyTurn && phase === "draw" && (pub.lastDiscardGroup?.length ?? 0) > 0;
 
-  const totalWidth = CARD_OVERLAP * (hand.length - 1) + CARD_W;
-  const startX = Math.max(8, (SCREEN_W - totalWidth) / 2);
+  const showYanivInfo = () => {
+    Alert.alert(
+      "מה זה יניב?",
+      `אפשר להכריז 'יניב' רק כשערך היד שלך ≤ 7.\n\nאם הכרזת:\n• היריב מקבל ניקוד = ערך היד שלו (אתה 0).\n• אם ליריב יד שווה או נמוכה משלך → אסף! אתה לוקח 30 + ערך היד שלך, היריב 0.\n\nהמטרה: לסיים את המשחק עם הכי פחות נקודות.\nמי שמגיע ל-100 — מפסיד את המשחק.`
+    );
+  };
+
+  const rows = Math.ceil(hand.length / CARDS_PER_ROW);
+  const gridHeight = rows * CARD_H + (rows - 1) * ROW_GAP;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -218,13 +243,12 @@ export function YanivHandScreen({ navigation }: Props) {
         </View>
 
         {/* Hand */}
-        <View style={styles.handArea}>
-          <DraggableHand
+        <View style={[styles.handArea, { height: gridHeight + 20 }]}>
+          <GridHand
             hand={hand}
-            startX={startX}
             cardW={CARD_W}
-            cardOverlap={CARD_OVERLAP}
             cardH={CARD_H}
+            gridWidth={SCREEN_W}
             selectedIds={selectedIds}
             selectionLegal={selectionLegal}
             onTap={onTap}
@@ -258,7 +282,28 @@ export function YanivHandScreen({ navigation }: Props) {
 
         {/* Actions */}
         <View style={styles.actionRow}>
-          <ActionBtn label="הכרז יניב" onPress={onCallYaniv} enabled={canCallYaniv} variant="gold" />
+          <View style={{ flex: 1, position: "relative" }}>
+            <ActionBtn label="הכרז יניב" onPress={onCallYaniv} enabled={canCallYaniv} variant="gold" />
+            <TouchableOpacity
+              onPress={showYanivInfo}
+              style={{
+                position: "absolute",
+                top: -8,
+                right: -6,
+                width: 22,
+                height: 22,
+                borderRadius: 11,
+                backgroundColor: theme.bg,
+                borderWidth: 1,
+                borderColor: theme.gold,
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 20,
+              }}
+            >
+              <Text style={{ color: theme.gold, fontWeight: "900", fontSize: 14 }}>?</Text>
+            </TouchableOpacity>
+          </View>
           <ActionBtn label="זרוק" onPress={onDiscardGroup} enabled={canDiscard} variant="primary" />
         </View>
 
@@ -272,40 +317,39 @@ export function YanivHandScreen({ navigation }: Props) {
   );
 }
 
-/* ---------------- DraggableHand (Yaniv variant: multi-select) ---------------- */
+/* ---------------- GridHand (Yaniv: multi-select) ---------------- */
 
-function DraggableHand({
+function GridHand({
   hand,
-  startX,
   cardW,
-  cardOverlap,
   cardH,
+  gridWidth,
   selectedIds,
   selectionLegal,
   onTap,
   onReorder,
 }: {
   hand: Card[];
-  startX: number;
   cardW: number;
-  cardOverlap: number;
   cardH: number;
+  gridWidth: number;
   selectedIds: Set<string>;
   selectionLegal: boolean;
   onTap: (id: string) => void;
   onReorder: (order: string[]) => void;
 }) {
+  const slotW = cardW + COL_GAP;
+  const slotH = cardH + ROW_GAP;
   return (
-    <View style={{ width: "100%", height: cardH + 50, position: "relative" }}>
+    <View style={{ width: gridWidth, height: "100%" }}>
       {hand.map((c, i) => (
         <CardSlot
           key={c.id}
           card={c}
           index={i}
           handLength={hand.length}
-          startX={startX}
-          cardW={cardW}
-          cardOverlap={cardOverlap}
+          slotW={slotW}
+          slotH={slotH}
           selected={selectedIds.has(c.id)}
           legalColor={selectionLegal ? theme.accent : undefined}
           onTap={() => onTap(c.id)}
@@ -326,9 +370,8 @@ function CardSlot({
   card,
   index,
   handLength,
-  startX,
-  cardW,
-  cardOverlap,
+  slotW,
+  slotH,
   selected,
   legalColor,
   onTap,
@@ -337,15 +380,16 @@ function CardSlot({
   card: Card;
   index: number;
   handLength: number;
-  startX: number;
-  cardW: number;
-  cardOverlap: number;
+  slotW: number;
+  slotH: number;
   selected: boolean;
   legalColor: string | undefined;
   onTap: () => void;
   onDragEnd: (newIndex: number) => void;
 }) {
-  const baseX = startX + index * cardOverlap;
+  const { row, col } = indexToGrid(index);
+  const { x: baseX, y: baseY } = gridToXY(row, col);
+
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
   const z = useSharedValue(index);
@@ -357,18 +401,21 @@ function CardSlot({
   }, [index, tx, ty, z]);
 
   const pan = Gesture.Pan()
-    .activateAfterLongPress(220)
+    .minDistance(12)
     .onStart(() => {
-      ty.value = withSpring(-30, { damping: 14, stiffness: 220 });
       z.value = 999;
-      runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
+      runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
     })
     .onUpdate((e) => {
       tx.value = e.translationX;
+      ty.value = e.translationY;
     })
     .onEnd(() => {
       const dropX = baseX + tx.value;
-      let target = Math.round((dropX - startX) / cardOverlap);
+      const dropY = baseY + ty.value;
+      const newCol = Math.round((dropX - SIDE_PAD) / slotW);
+      const newRow = Math.round(dropY / slotH);
+      let target = newRow * CARDS_PER_ROW + newCol;
       if (target < 0) target = 0;
       if (target > handLength - 1) target = handLength - 1;
       tx.value = withSpring(0, { damping: 18, stiffness: 220 });
@@ -376,10 +423,10 @@ function CardSlot({
       runOnJS(onDragEnd)(target);
     });
 
-  const tap = Gesture.Tap().onEnd((_e, success) => {
+  const tap = Gesture.Tap().maxDuration(220).onEnd((_e, success) => {
     if (success) runOnJS(onTap)();
   });
-  const composed = Gesture.Simultaneous(pan, tap);
+  const composed = Gesture.Race(pan, tap);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: tx.value }, { translateY: ty.value }],
@@ -394,13 +441,20 @@ function CardSlot({
           {
             position: "absolute",
             left: baseX,
-            top: 10,
-            width: cardW,
+            top: baseY,
+            width: CARD_W,
+            height: CARD_H,
           },
           animatedStyle,
         ]}
       >
-        <CardView card={card} size="md" selected={selected} meldColor={selected ? legalColor : undefined} />
+        <CardView
+          card={card}
+          size="md"
+          selected={selected}
+          meldColor={selected ? legalColor : undefined}
+          style={{ width: CARD_W, height: CARD_H }}
+        />
       </Animated.View>
     </GestureDetector>
   );
@@ -522,9 +576,8 @@ const styles = StyleSheet.create({
   drawBtnLabel: { color: theme.gold, fontSize: 15, fontWeight: "900" },
   drawBtnSub: { color: theme.textDim, fontSize: 11, marginTop: 2 },
   handArea: {
-    flex: 1,
     justifyContent: "center",
-    marginTop: 12,
+    marginTop: 24,
     marginBottom: 6,
   },
   sortRow: {

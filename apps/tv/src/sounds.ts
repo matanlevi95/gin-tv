@@ -18,6 +18,26 @@ type SoundName =
 
 let ctx: AudioContext | null = null;
 let muted = false;
+let gestureUnlocked = false;
+
+// Chrome's autoplay policy blocks AudioContext until a user gesture has
+// happened on the page. We unlock the context on the FIRST gesture so the
+// initial deal/draw sounds actually play.
+function installGestureUnlock() {
+  if (typeof document === "undefined") return;
+  const unlock = () => {
+    gestureUnlocked = true;
+    const c = ctx ?? getCtx();
+    if (c?.state === "suspended") c.resume().catch(() => {});
+    document.removeEventListener("click", unlock);
+    document.removeEventListener("touchstart", unlock);
+    document.removeEventListener("keydown", unlock);
+  };
+  document.addEventListener("click", unlock, { once: false });
+  document.addEventListener("touchstart", unlock, { once: false });
+  document.addEventListener("keydown", unlock, { once: false });
+}
+if (typeof document !== "undefined") installGestureUnlock();
 try {
   const stored = typeof localStorage !== "undefined" ? localStorage.getItem("ginTv:muted") : null;
   muted = stored === "1";
@@ -94,8 +114,9 @@ export function play(name: SoundName) {
   if (muted) return;
   const c = getCtx();
   if (!c) return;
-  // Some browsers suspend the AudioContext until user gesture — best-effort resume.
   if (c.state === "suspended") c.resume().catch(() => {});
+  // Skip silently if the user hasn't interacted yet (Chrome blocks).
+  if (!gestureUnlocked && c.state !== "running") return;
   const t = c.currentTime;
   switch (name) {
     case "click":

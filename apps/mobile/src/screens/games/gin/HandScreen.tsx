@@ -1,20 +1,16 @@
 /**
  * Gin Hand Controller — phone-as-hand.
  *
- * UX principles:
- *  • The phone shows ONLY the player's hand + their action buttons. The TV
- *    is the table (deck, discard, scores, turn, opponent). To know what the
- *    discard top is, the player looks up at the TV — that's intentional and
- *    is what makes the TV essential to gameplay.
- *  • All 10–11 cards fit on screen without scrolling. Cards overlap (negative
- *    margin) and the selected card lifts above the strip.
- *  • Cards are draggable. Long-press to grab, drag horizontally to reposition,
- *    release to drop. The hand reorders accordingly and is synced to the server.
- *  • Deadwood is computed from the player's CURRENT visible arrangement, so
- *    reorganizing groups updates the count live.
+ * Layout: cards arranged in a 2D grid (2 rows by default). Easy to read,
+ * full-size taps, no horizontal scroll. Cards can be dragged freely between
+ * any two slots — pick one up, drop on another, they swap positions.
+ *
+ * Pan starts after a small movement (no long-press), so reordering is
+ * immediately discoverable: tap = select, drag = move.
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Dimensions,
   StyleSheet,
   Text,
@@ -55,9 +51,14 @@ import { RootStackParamList } from "../../../../App";
 type Props = NativeStackScreenProps<RootStackParamList, "Hand">;
 
 const SCREEN_W = Dimensions.get("window").width;
-const CARD_W = 58;
-const CARD_H = 84;
-const CARD_OVERLAP = 22; // visible width per non-end card
+const CARDS_PER_ROW = 6; // 6 in row 1, remainder in row 2 (so 5/5, 5/6, or 6/5)
+const SIDE_PAD = 12;
+const COL_GAP = 4;
+const ROW_GAP = 14;
+const CARD_W = Math.floor(
+  (SCREEN_W - SIDE_PAD * 2 - COL_GAP * (CARDS_PER_ROW - 1)) / CARDS_PER_ROW
+);
+const CARD_H = Math.round(CARD_W * 1.45);
 
 const MELD_COLORS = ["#4caf6d", "#d4a85b", "#c8553d", "#6a8caf", "#b478c9"];
 
@@ -104,6 +105,18 @@ function isVisualMeld(cards: Card[]): boolean {
     if (RANK_ORDER[sorted[i].rank] !== RANK_ORDER[sorted[i - 1].rank] + 1) return false;
   }
   return true;
+}
+
+function indexToGrid(i: number) {
+  const row = Math.floor(i / CARDS_PER_ROW);
+  const col = i % CARDS_PER_ROW;
+  return { row, col };
+}
+function gridToXY(row: number, col: number) {
+  return {
+    x: SIDE_PAD + col * (CARD_W + COL_GAP),
+    y: row * (CARD_H + ROW_GAP),
+  };
 }
 
 export function HandScreen({ navigation }: Props) {
@@ -187,9 +200,6 @@ export function HandScreen({ navigation }: Props) {
     [reorderHand]
   );
 
-  const totalWidth = CARD_OVERLAP * (hand.length - 1) + CARD_W;
-  const startX = Math.max(8, (SCREEN_W - totalWidth) / 2);
-
   const onSelect = useCallback((cardId: string) => {
     Haptics.selectionAsync().catch(() => {});
     setSelectedId((prev) => (prev === cardId ? null : cardId));
@@ -228,6 +238,13 @@ export function HandScreen({ navigation }: Props) {
     setSelectedId(null);
   }, [selectedId, gin]);
 
+  const showKnockInfo = () => {
+    Alert.alert(
+      "מה זה נקישה?",
+      "נקישה = סוגרים את הסיבוב כשערך הפסולת ביד שלך ≤ 10. אתה זורק קלף סופי כדי להכריז.\n\n• אם ערך הפסולת שלך נמוך מהיריב → אתה זוכה בהפרש.\n• אם ליריב פסולת שווה או נמוכה משלך → אנדרקאט! היריב מקבל את ההפרש + 25 נקודות בונוס.\n\nג׳ין (כפתור הזהוב) = אין לך פסולת בכלל (כל הקלפים בסדרות). בונוס 25 נקודות + כל הפסולת של היריב."
+    );
+  };
+
   if (!publicState || !privateState || !me) {
     return (
       <SafeAreaView style={styles.root}>
@@ -249,6 +266,11 @@ export function HandScreen({ navigation }: Props) {
     !!selectedId &&
     privateState.hand.length === 11 &&
     canGinNow(privateState.hand, selectedId);
+
+  // Compute grid dimensions for the hand area
+  const rows = Math.ceil(hand.length / CARDS_PER_ROW);
+  const gridHeight = rows * CARD_H + (rows - 1) * ROW_GAP;
+  const gridWidth = SCREEN_W;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -275,7 +297,7 @@ export function HandScreen({ navigation }: Props) {
           />
           <DrawBtn
             label={HE.drawDiscard}
-            sub={`זריקה — ראה ב-TV`}
+            sub="זריקה — ראה ב-TV"
             enabled={isMyTurn && phase === "draw" && !!publicState.discardTop}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -284,13 +306,12 @@ export function HandScreen({ navigation }: Props) {
           />
         </View>
 
-        <View style={styles.handArea}>
-          <DraggableHand
+        <View style={[styles.handArea, { height: gridHeight + 20 }]}>
+          <GridHand
             hand={hand}
-            startX={startX}
             cardW={CARD_W}
-            cardOverlap={CARD_OVERLAP}
             cardH={CARD_H}
+            gridWidth={gridWidth}
             selectedId={selectedId}
             meldColorByCard={meldColorByCard}
             onTap={onSelect}
@@ -309,18 +330,11 @@ export function HandScreen({ navigation }: Props) {
           )}
         </View>
 
-        <Text style={styles.helper}>
-          {!isMyTurn
-            ? "ממתין ליריב"
-            : phase === "draw"
-            ? "בחר קופה או זריקה"
-            : selectedId
-            ? "לחץ זרוק / נקישה / ג׳ין"
-            : "בחר קלף ואז לחץ זרוק"}
-        </Text>
-
         <View style={styles.actionRow}>
-          <ActionBtn label={HE.knock} onPress={onKnock} enabled={canKnock} variant="secondary" />
+          <View style={{ flex: 1, position: "relative" }}>
+            <ActionBtn label={HE.knock} onPress={onKnock} enabled={canKnock} variant="secondary" />
+            <InfoButton onPress={showKnockInfo} />
+          </View>
           <ActionBtn label={HE.discard} onPress={onDiscard} enabled={canDiscard} variant="primary" />
           <ActionBtn label={HE.gin} onPress={onGin} enabled={canGin} variant="gold" />
         </View>
@@ -335,40 +349,39 @@ export function HandScreen({ navigation }: Props) {
   );
 }
 
-/* ---------------- DraggableHand ---------------- */
+/* ---------------- GridHand: 2D draggable grid ---------------- */
 
-function DraggableHand({
+function GridHand({
   hand,
-  startX,
   cardW,
-  cardOverlap,
   cardH,
+  gridWidth,
   selectedId,
   meldColorByCard,
   onTap,
   onReorder,
 }: {
   hand: Card[];
-  startX: number;
   cardW: number;
-  cardOverlap: number;
   cardH: number;
+  gridWidth: number;
   selectedId: string | null;
   meldColorByCard: Map<string, string>;
   onTap: (id: string) => void;
   onReorder: (order: string[]) => void;
 }) {
+  const slotW = cardW + COL_GAP;
+  const slotH = cardH + ROW_GAP;
   return (
-    <View style={{ width: "100%", height: cardH + 50, position: "relative" }}>
+    <View style={{ width: gridWidth, height: "100%" }}>
       {hand.map((c, i) => (
         <CardSlot
           key={c.id}
           card={c}
           index={i}
           handLength={hand.length}
-          startX={startX}
-          cardW={cardW}
-          cardOverlap={cardOverlap}
+          slotW={slotW}
+          slotH={slotH}
           selected={selectedId === c.id}
           meldColor={meldColorByCard.get(c.id)}
           onTap={() => onTap(c.id)}
@@ -389,9 +402,8 @@ function CardSlot({
   card,
   index,
   handLength,
-  startX,
-  cardW,
-  cardOverlap,
+  slotW,
+  slotH,
   selected,
   meldColor,
   onTap,
@@ -400,15 +412,16 @@ function CardSlot({
   card: Card;
   index: number;
   handLength: number;
-  startX: number;
-  cardW: number;
-  cardOverlap: number;
+  slotW: number;
+  slotH: number;
   selected: boolean;
   meldColor: string | undefined;
   onTap: () => void;
   onDragEnd: (newIndex: number) => void;
 }) {
-  const baseX = startX + index * cardOverlap;
+  const { row, col } = indexToGrid(index);
+  const { x: baseX, y: baseY } = gridToXY(row, col);
+
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
   const z = useSharedValue(index);
@@ -419,19 +432,24 @@ function CardSlot({
     z.value = index;
   }, [index, tx, ty, z]);
 
+  // Pan: starts after ~12px movement so a small finger jitter on tap won't trigger it.
   const pan = Gesture.Pan()
-    .activateAfterLongPress(220)
+    .minDistance(12)
     .onStart(() => {
-      ty.value = withSpring(-30, { damping: 14, stiffness: 220 });
       z.value = 999;
-      runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Medium);
+      runOnJS(Haptics.impactAsync)(Haptics.ImpactFeedbackStyle.Light);
     })
     .onUpdate((e) => {
       tx.value = e.translationX;
+      ty.value = e.translationY;
     })
     .onEnd(() => {
+      // Compute drop position in grid coordinates.
       const dropX = baseX + tx.value;
-      let target = Math.round((dropX - startX) / cardOverlap);
+      const dropY = baseY + ty.value;
+      const newCol = Math.round((dropX - SIDE_PAD) / (slotW));
+      const newRow = Math.round(dropY / slotH);
+      let target = newRow * CARDS_PER_ROW + newCol;
       if (target < 0) target = 0;
       if (target > handLength - 1) target = handLength - 1;
       tx.value = withSpring(0, { damping: 18, stiffness: 220 });
@@ -439,10 +457,10 @@ function CardSlot({
       runOnJS(onDragEnd)(target);
     });
 
-  const tap = Gesture.Tap().onEnd((_e, success) => {
+  const tap = Gesture.Tap().maxDuration(220).onEnd((_e, success) => {
     if (success) runOnJS(onTap)();
   });
-  const composed = Gesture.Simultaneous(pan, tap);
+  const composed = Gesture.Race(pan, tap);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: tx.value }, { translateY: ty.value }],
@@ -457,8 +475,9 @@ function CardSlot({
           {
             position: "absolute",
             left: baseX,
-            top: 10,
-            width: cardW,
+            top: baseY,
+            width: CARD_W,
+            height: CARD_H,
           },
           animatedStyle,
         ]}
@@ -468,6 +487,7 @@ function CardSlot({
           size="md"
           selected={selected}
           meldColor={meldColor}
+          style={{ width: CARD_W, height: CARD_H }}
         />
       </Animated.View>
     </GestureDetector>
@@ -539,6 +559,30 @@ function SortPill({ label, onPress }: { label: string; onPress: () => void }) {
   );
 }
 
+function InfoButton({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        position: "absolute",
+        top: -8,
+        right: -6,
+        width: 22,
+        height: 22,
+        borderRadius: 11,
+        backgroundColor: theme.bg,
+        borderWidth: 1,
+        borderColor: theme.gold,
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 20,
+      }}
+    >
+      <Text style={{ color: theme.gold, fontWeight: "900", fontSize: 14 }}>?</Text>
+    </TouchableOpacity>
+  );
+}
+
 function ActionBtn({
   label,
   onPress,
@@ -596,29 +640,19 @@ function canGinNow(hand: Card[], discardCardId: string): boolean {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.felt, paddingHorizontal: 8 },
+  root: { flex: 1, backgroundColor: theme.felt, paddingHorizontal: 0 },
   loadingText: { color: theme.text, textAlign: "center", marginTop: 40, fontSize: 20 },
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 8,
+    paddingHorizontal: 14,
     paddingTop: 6,
   },
   metaText: { color: theme.text, fontSize: 14, fontWeight: "700" },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
+  pill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1 },
   pillText: { fontWeight: "800", fontSize: 14 },
-  drawRow: {
-    flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 8,
-    marginTop: 10,
-  },
+  drawRow: { flexDirection: "row", gap: 8, paddingHorizontal: 14, marginTop: 10 },
   drawBtn: {
     flex: 1,
     backgroundColor: theme.panel,
@@ -631,17 +665,16 @@ const styles = StyleSheet.create({
   drawBtnLabel: { color: theme.gold, fontSize: 15, fontWeight: "900" },
   drawBtnSub: { color: theme.textDim, fontSize: 11, marginTop: 2 },
   handArea: {
-    flex: 1,
     justifyContent: "center",
-    marginTop: 12,
+    marginTop: 24,
     marginBottom: 6,
   },
   sortRow: {
     flexDirection: "row",
     gap: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: 14,
     flexWrap: "wrap",
-    marginTop: 4,
+    marginTop: 12,
   },
   sortPill: {
     backgroundColor: theme.panel,
@@ -660,13 +693,12 @@ const styles = StyleSheet.create({
     borderColor: theme.danger,
   },
   clearBtnText: { color: theme.danger, fontSize: 12, fontWeight: "700" },
-  helper: { color: theme.textDim, textAlign: "center", marginTop: 6, fontSize: 12 },
   actionRow: {
     flexDirection: "row",
     gap: 6,
-    paddingHorizontal: 8,
-    marginTop: 8,
-    marginBottom: 8,
+    paddingHorizontal: 14,
+    marginTop: 12,
+    marginBottom: 12,
   },
   actionBtn: {
     flex: 1,
