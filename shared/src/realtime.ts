@@ -36,6 +36,7 @@ export function playerChannel(roomCode: string, token: string): string {
 // ---------- Player → Host (action) events ----------
 // Sent by phones on the room channel. Host filters by `fromToken` to attribute to a player.
 
+/** Game-agnostic envelope. Game-specific intents go inside `game_action.action`. */
 export type ActionEvent =
   | {
       kind: "hello";
@@ -52,6 +53,10 @@ export type ActionEvent =
     }
   | { kind: "ready"; fromToken: string; ready: boolean }
   | { kind: "ready_next"; fromToken: string }
+  /** Wraps a per-game action. `gameType` lets the host route to the right adapter. */
+  | { kind: "game_action"; fromToken: string; gameType: "gin" | "yaniv"; action: unknown }
+  // -- Legacy Gin actions (kept for backwards compatibility with old APKs in
+  //    the wild; the new mobile builds use kind:"game_action" instead).
   | { kind: "draw_deck"; fromToken: string }
   | { kind: "draw_discard"; fromToken: string }
   | { kind: "discard"; fromToken: string; cardId: string }
@@ -113,10 +118,13 @@ export function generatePlayerToken(): string {
 /**
  * What the TV encodes in its QR (or what the user types as the 4-char "TV code").
  * Single QR per TV — the phone generates its own private token on connect.
+ * `gameType` is encoded so the phone can route to the right controller screen
+ * before any state arrives (snappier UX); the TV always confirms via state.
  */
 export interface JoinPayload {
   v: number;
   room: string; // 4-char stable TV identifier
+  gameType?: "gin" | "yaniv"; // optional for back-compat with older QRs
   supabaseUrl: string;
   supabaseAnonKey: string;
 }
@@ -128,6 +136,7 @@ export function encodeJoinUrl(p: JoinPayload): string {
     url: p.supabaseUrl,
     key: p.supabaseAnonKey,
   });
+  if (p.gameType) params.set("g", p.gameType);
   return `gin-tv://join?${params.toString()}`;
 }
 
@@ -140,8 +149,15 @@ export function decodeJoinUrl(url: string): JoinPayload | null {
     const room = params.get("room");
     const supabaseUrl = params.get("url");
     const supabaseAnonKey = params.get("key");
+    const g = params.get("g");
     if (!room || !supabaseUrl || !supabaseAnonKey) return null;
-    return { v, room: room.toUpperCase(), supabaseUrl, supabaseAnonKey };
+    return {
+      v,
+      room: room.toUpperCase(),
+      gameType: g === "gin" || g === "yaniv" ? g : undefined,
+      supabaseUrl,
+      supabaseAnonKey,
+    };
   } catch {
     return null;
   }

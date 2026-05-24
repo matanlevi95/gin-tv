@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { HE, PublicGameState } from "@gin-tv/shared";
-import { Card, CardBack } from "./Card";
+import { Card, CardBack } from "../../../Card";
 
 interface Props {
   state: PublicGameState;

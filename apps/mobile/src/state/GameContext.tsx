@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient, RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
+import { supabase as appSupabase } from "./supabase";
 import {
   ActionEvent,
   PrivateEvent,
@@ -131,6 +132,8 @@ interface GameCtx {
   knock: (discardCardId: string) => void;
   gin: (discardCardId: string) => void;
   reorderHand: (order: string[]) => void;
+  /** Game-agnostic dispatch; Yaniv (and future games) use this directly. */
+  sendGameAction: (gameType: "gin" | "yaniv", action: unknown) => void;
   reset: () => void;
 }
 
@@ -159,7 +162,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     profileRef.current = profile;
   }, [profile]);
 
-  // ---- Persistence ----
+  // ---- Persistence: local AsyncStorage + cloud Supabase (when signed in) ----
   useEffect(() => {
     (async () => {
       try {
@@ -167,6 +170,35 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (p) setProfileState({ ...newGuestProfile(), ...JSON.parse(p) });
         const h = await AsyncStorage.getItem(STORAGE_HISTORY);
         if (h) setHistory(JSON.parse(h));
+        // Try to merge cloud profile if signed in
+        const sess = await appSupabase.auth.getSession();
+        const uid = sess.data.session?.user?.id;
+        if (uid) {
+          const { data } = await appSupabase
+            .from("profiles")
+            .select("display_name, avatar_letter, total_wins, win_streak, games_played, first_win, first_gin, three_streak, knock_win, undercut, ach_10, ach_50, saved_tvs")
+            .eq("id", uid)
+            .maybeSingle();
+          if (data) {
+            setProfileState((prev) => ({
+              ...prev,
+              id: uid,
+              name: data.display_name || prev.name,
+              avatarLetter: data.avatar_letter || prev.avatarLetter,
+              totalWins: data.total_wins ?? prev.totalWins,
+              winStreak: data.win_streak ?? prev.winStreak,
+              gamesPlayed: data.games_played ?? prev.gamesPlayed,
+              firstWin: data.first_win ?? prev.firstWin,
+              firstGin: data.first_gin ?? prev.firstGin,
+              threeStreak: data.three_streak ?? prev.threeStreak,
+              knockWin: data.knock_win ?? prev.knockWin,
+              undercut: data.undercut ?? prev.undercut,
+              ach10: data.ach_10 ?? prev.ach10,
+              ach50: data.ach_50 ?? prev.ach50,
+              tvs: (data.saved_tvs as any[]) ?? prev.tvs,
+            }));
+          }
+        }
       } catch {}
     })();
     return () => {
@@ -180,6 +212,32 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setProfileState(p);
     try {
       await AsyncStorage.setItem(STORAGE_PROFILE, JSON.stringify(p));
+    } catch {}
+    // Cloud sync (best-effort, silent on error)
+    try {
+      const sess = await appSupabase.auth.getSession();
+      const uid = sess.data.session?.user?.id;
+      if (uid) {
+        await appSupabase
+          .from("profiles")
+          .upsert({
+            id: uid,
+            display_name: p.name,
+            avatar_letter: p.avatarLetter,
+            total_wins: p.totalWins,
+            win_streak: p.winStreak,
+            games_played: p.gamesPlayed,
+            first_win: p.firstWin,
+            first_gin: p.firstGin,
+            three_streak: p.threeStreak,
+            knock_win: p.knockWin,
+            undercut: p.undercut,
+            ach_10: p.ach10,
+            ach_50: p.ach50,
+            saved_tvs: p.tvs,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "id" });
+      }
     } catch {}
   }, []);
 
@@ -232,6 +290,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const s = sessionRef.current;
     if (!s) return;
     s.roomChan.send({ type: "broadcast", event: "action", payload: ev }).catch(() => {});
+  }, []);
+
+  /** Generic per-game action dispatch. Wraps in the {kind:"game_action"} envelope. */
+  const sendGameAction = useCallback((gameType: "gin" | "yaniv", action: unknown) => {
+    const s = sessionRef.current;
+    if (!s) return;
+    s.roomChan
+      .send({
+        type: "broadcast",
+        event: "action",
+        payload: { kind: "game_action", fromToken: s.privateToken, gameType, action },
+      })
+      .catch(() => {});
   }, []);
 
   function teardownSession() {
@@ -490,47 +561,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!s) return;
     sendAction({ kind: "ready_next", fromToken: s.privateToken });
   }, [sendAction]);
-  const drawDeck = useCallback(() => {
-    const s = sessionRef.current;
-    if (!s) return;
-    sendAction({ kind: "draw_deck", fromToken: s.privateToken });
-  }, [sendAction]);
-  const drawDiscard = useCallback(() => {
-    const s = sessionRef.current;
-    if (!s) return;
-    sendAction({ kind: "draw_discard", fromToken: s.privateToken });
-  }, [sendAction]);
+  // ---- Gin-specific helpers (wrap into game_action) ----
+  const drawDeck = useCallback(() => sendGameAction("gin", { kind: "draw_deck" }), [sendGameAction]);
+  const drawDiscard = useCallback(() => sendGameAction("gin", { kind: "draw_discard" }), [sendGameAction]);
   const discardCard = useCallback(
-    (cardId: string) => {
-      const s = sessionRef.current;
-      if (!s) return;
-      sendAction({ kind: "discard", fromToken: s.privateToken, cardId });
-    },
-    [sendAction]
+    (cardId: string) => sendGameAction("gin", { kind: "discard", cardId }),
+    [sendGameAction]
   );
   const knock = useCallback(
-    (discardCardId: string) => {
-      const s = sessionRef.current;
-      if (!s) return;
-      sendAction({ kind: "knock", fromToken: s.privateToken, discardCardId });
-    },
-    [sendAction]
+    (discardCardId: string) => sendGameAction("gin", { kind: "knock", discardCardId }),
+    [sendGameAction]
   );
   const gin = useCallback(
-    (discardCardId: string) => {
-      const s = sessionRef.current;
-      if (!s) return;
-      sendAction({ kind: "gin", fromToken: s.privateToken, discardCardId });
-    },
-    [sendAction]
+    (discardCardId: string) => sendGameAction("gin", { kind: "gin", discardCardId }),
+    [sendGameAction]
   );
   const reorderHand = useCallback(
-    (order: string[]) => {
-      const s = sessionRef.current;
-      if (!s) return;
-      sendAction({ kind: "reorder_hand", fromToken: s.privateToken, order });
-    },
-    [sendAction]
+    (order: string[]) => sendGameAction("gin", { kind: "reorder_hand", order }),
+    [sendGameAction]
   );
   const reset = useCallback(() => {
     setRoomCode(null);
@@ -571,6 +619,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       knock,
       gin,
       reorderHand,
+      sendGameAction,
       reset,
     }),
     [
@@ -600,6 +649,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       knock,
       gin,
       reorderHand,
+      sendGameAction,
       reset,
     ]
   );

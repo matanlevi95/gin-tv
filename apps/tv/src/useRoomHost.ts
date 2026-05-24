@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   ActionEvent,
+  GameType,
   PrivateEvent,
   PublicEvent,
   PublicGameState,
@@ -23,6 +24,7 @@ import {
   roomChannel,
 } from "@gin-tv/shared";
 import { supabase } from "./supabase";
+import { play } from "./sounds";
 
 const STORAGE_KEY = "ginTv:tvCode";
 
@@ -40,7 +42,9 @@ function loadOrCreateTvCode(): string {
 
 export interface RoomHostHandle {
   roomCode: string;
-  state: PublicGameState | null;
+  gameType: GameType;
+  /** State is a union — game-specific UIs narrow by `state.gameType`. */
+  state: any | null;
   roundEnd: RoundEndPayload | null;
   matchEnd: { winner: string; totals: Record<string, number> } | null;
   countdown: number | null;
@@ -48,9 +52,9 @@ export interface RoomHostHandle {
   rotateCode: () => void;
 }
 
-export function useRoomHost(): RoomHostHandle {
+export function useRoomHost(gameType: GameType): RoomHostHandle {
   const [roomCode, setRoomCode] = useState(() => loadOrCreateTvCode());
-  const [state, setState] = useState<PublicGameState | null>(null);
+  const [state, setState] = useState<any | null>(null);
   const [roundEnd, setRoundEnd] = useState<RoundEndPayload | null>(null);
   const [matchEnd, setMatchEnd] = useState<RoomHostHandle["matchEnd"]>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -72,15 +76,29 @@ export function useRoomHost(): RoomHostHandle {
       {
         emitPublic: (ev: PublicEvent) => {
           if (ev.kind === "state") {
-            setState(ev.payload);
+            // Detect transitions to play sound effects.
+            setState((prev: any) => {
+              if (prev && ev.payload.lastAction?.at !== prev.lastAction?.at) {
+                const kind = ev.payload.lastAction?.kind;
+                if (kind === "draw_deck" || kind === "draw_discard") play("draw");
+                else if (kind === "discard") play("discard");
+                else if (kind === "deal") play("deal");
+              }
+              return ev.payload;
+            });
             if (ev.payload.status === "playing") setRoundEnd(null);
           } else if (ev.kind === "round_end") {
             setRoundEnd(ev.payload);
+            if (ev.payload.reason === "gin") play("gin");
+            else if (ev.payload.reason === "knock") play("knock");
+            else if (ev.payload.reason === "undercut") play("undercut");
           } else if (ev.kind === "match_end") {
             setMatchEnd({ winner: ev.winner, totals: ev.totals });
+            play("win");
           } else if (ev.kind === "game_start") {
             setRoundEnd(null);
             runCountdown(setCountdown);
+            play("deal");
           }
           channel.send({ type: "broadcast", event: "public", payload: ev });
         },
@@ -105,7 +123,7 @@ export function useRoomHost(): RoomHostHandle {
             .catch(() => {});
         },
       },
-      roomCode
+      { roomCode, gameType }
     );
     hostRef.current = host;
 
@@ -135,7 +153,7 @@ export function useRoomHost(): RoomHostHandle {
       }
       senderByToken.current.clear();
     };
-  }, [roomCode]);
+  }, [roomCode, gameType]);
 
   const rotateCode = () => {
     const fresh = generateRoomCode();
@@ -147,6 +165,7 @@ export function useRoomHost(): RoomHostHandle {
 
   return {
     roomCode,
+    gameType,
     state,
     roundEnd,
     matchEnd,

@@ -91,3 +91,27 @@ export type {
 
 export { RoomHost } from "./host";
 export type { HostBroadcast } from "./host";
+
+// New multi-game exports — adapters + types.
+export type {
+  GameType,
+  BasePlayer,
+  BasePublicState,
+  GameAdapter,
+} from "./games/common/types";
+export { ginAdapter } from "./games/gin/adapter";
+export type { GinAction, GinPublic, GinPrivate } from "./games/gin/adapter";
+export { yanivAdapter } from "./games/yaniv/adapter";
+export type {
+  YanivAction,
+  YanivPublic,
+  YanivPrivate,
+} from "./games/yaniv/adapter";
+export type { YanivRoundEnd, YanivGameState } from "./games/yaniv/engine";
+export {
+  isLegalDiscard,
+  handValue,
+  YANIV_DEFAULT_TARGET,
+  YANIV_THRESHOLD,
+  ASSAF_BONUS,
+} from "./games/yaniv/engine";

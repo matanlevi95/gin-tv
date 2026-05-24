@@ -1,7 +1,7 @@
 import React from "react";
 import { HE, RoundEndPayload, PublicGameState } from "@gin-tv/shared";
-import { Card } from "./Card";
-import { Confetti } from "./Confetti";
+import { Card } from "../../../Card";
+import { Confetti } from "../../../Confetti";
 
 interface Props {
   payload: RoundEndPayload;
