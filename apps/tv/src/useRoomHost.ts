@@ -133,11 +133,27 @@ export function useRoomHost(gameType: GameType): RoomHostHandle {
       host.handleAction(msg.payload as ActionEvent);
     });
 
-    channel.subscribe((status) => {
-      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        console.error("[gin-tv] room channel subscribe failed:", status);
+    // Auto-retry on transient subscribe errors with exponential backoff.
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryCount = 0;
+    const onStatus = (status: string) => {
+      if (status === "SUBSCRIBED") {
+        retryCount = 0;
+        return;
       }
-    });
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        if (retryTimer) clearTimeout(retryTimer);
+        const delay = Math.min(8000, 800 * 2 ** retryCount);
+        retryCount++;
+        retryTimer = setTimeout(() => {
+          try {
+            channel.unsubscribe().catch(() => {});
+          } catch {}
+          channel.subscribe(onStatus);
+        }, delay);
+      }
+    };
+    channel.subscribe(onStatus);
 
     return () => {
       host.destroy();
