@@ -50,35 +50,18 @@ export function ScanScreen({ navigation }: Props) {
       setBusy(false);
       inFlight.current = false;
       if (res.ok) {
-        // Prompt to save (skippable).
-        Alert.prompt(
-          HE.saveTV,
-          HE.tvLabel,
-          [
-            {
-              text: "דלג",
-              style: "cancel",
-              onPress: () => navigation.replace("Lobby", { roomCode: params.roomCode }),
-            },
-            {
-              text: "שמור",
-              onPress: async (label) => {
-                if (label && label.trim()) {
-                  await saveTV({
-                    code: params.roomCode,
-                    label: label.trim(),
-                    supabaseUrl: params.supabaseUrl || extra.supabaseUrl || "",
-                    supabaseAnonKey: params.supabaseAnonKey || extra.supabaseAnonKey || "",
-                    lastConnectedAt: Date.now(),
-                  });
-                }
-                navigation.replace("Lobby", { roomCode: params.roomCode });
-              },
-            },
-          ],
-          "plain-text",
-          ""
-        );
+        // Navigate to the lobby immediately — UX cannot block on a prompt because
+        // Alert.prompt is iOS-only and silently does nothing on Android.
+        // Save the TV in the background with the room code as the default label;
+        // user can rename it later from the Profile screen.
+        saveTV({
+          code: params.roomCode,
+          label: `טלוויזיה ${params.roomCode}`,
+          supabaseUrl: params.supabaseUrl || extra.supabaseUrl || "",
+          supabaseAnonKey: params.supabaseAnonKey || extra.supabaseAnonKey || "",
+          lastConnectedAt: Date.now(),
+        }).catch(() => {});
+        navigation.replace("Lobby", { roomCode: params.roomCode });
       } else {
         Alert.alert("שגיאה", res.error || HE.errorGeneric);
         setScanned(false);
