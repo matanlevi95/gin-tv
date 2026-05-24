@@ -80,10 +80,11 @@ function GameRoom({ gameType }: { gameType: GameType }) {
   });
 
   if (!state) {
+    const label = gameType === "yaniv" ? "יניב" : "ג׳ין";
     return (
       <div className="lobby">
         <div className="title">
-          <span className="accent">ג׳ין</span> TV
+          <span className="accent">{label}</span> TV
         </div>
         <div style={{ color: "var(--text-dim)" }}>{HE.loading}</div>
       </div>

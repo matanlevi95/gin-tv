@@ -13,7 +13,7 @@ export function SplashScreen({ navigation }: Props) {
   }, [navigation]);
   return (
     <View style={styles.root}>
-      <Text style={styles.titleGold}>ג׳ין</Text>
+      <Text style={styles.titleGold}>משחקי</Text>
       <Text style={styles.titleCream}>TV</Text>
       <Text style={styles.sub}>טוען…</Text>
     </View>

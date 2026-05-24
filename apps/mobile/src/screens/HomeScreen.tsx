@@ -72,7 +72,7 @@ export function HomeScreen({ navigation }: Props) {
             <Text style={styles.greeting}>שלום וברוכים הבאים</Text>
           </View>
           <View style={styles.titleBlock}>
-            <Text style={styles.titleGold}>ג׳ין</Text>
+            <Text style={styles.titleGold}>משחקי</Text>
             <Text style={styles.titleCream}>TV</Text>
           </View>
         </View>

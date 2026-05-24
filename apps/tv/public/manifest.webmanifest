@@ -1,7 +1,7 @@
 {
-  "name": "ג׳ין TV",
-  "short_name": "ג׳ין TV",
-  "description": "משחק ג׳ין רמי בעברית — הטלוויזיה כשולחן",
+  "name": "משחקי TV",
+  "short_name": "משחקי TV",
+  "description": "משחקי קלפים בעברית — הטלוויזיה כשולחן",
   "lang": "he",
   "dir": "rtl",
   "start_url": "/",

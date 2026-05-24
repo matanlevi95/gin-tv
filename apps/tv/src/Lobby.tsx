@@ -1,12 +1,17 @@
 import React, { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { HE, PublicGameState } from "@gin-tv/shared";
+import { HE, GameType } from "@gin-tv/shared";
 
 interface Props {
-  state: PublicGameState;
+  state: any;
   joinUrl: string;
   countdown?: number | null;
 }
+
+const GAME_LABEL: Record<GameType, string> = {
+  gin: "ג׳ין",
+  yaniv: "יניב",
+};
 
 export function Lobby({ state, joinUrl, countdown }: Props) {
   const [qr, setQr] = useState<string>("");
@@ -22,10 +27,12 @@ export function Lobby({ state, joinUrl, countdown }: Props) {
     );
   }
 
+  const gameLabel = GAME_LABEL[(state.gameType as GameType) ?? "gin"];
+
   return (
     <div className="lobby">
       <div className="title">
-        <span className="accent">ג׳ין</span> TV
+        <span className="accent">{gameLabel}</span> TV
       </div>
 
       <div style={{ color: "var(--text-dim)", fontSize: 22, marginBottom: 8 }}>
@@ -46,7 +53,7 @@ export function Lobby({ state, joinUrl, countdown }: Props) {
       </div>
 
       <div className="players-strip">
-        {state.players.map((p) => (
+        {state.players.map((p: any) => (
           <div key={p.id} className={`player-chip ${p.ready ? "ready" : ""}`}>
             <div className="avatar">{p.avatar || p.name?.[0] || "?"}</div>
             <div>
@@ -68,7 +75,7 @@ export function Lobby({ state, joinUrl, countdown }: Props) {
         ))}
       </div>
 
-      {state.players.length === 2 && !state.players.every((p) => p.ready) && (
+      {state.players.length === 2 && !state.players.every((p: any) => p.ready) && (
         <div style={{ color: "var(--text-dim)", fontSize: 18 }}>
           לחצו <b style={{ color: "var(--gold)" }}>{HE.ready}</b> בנייד כשמוכנים
         </div>

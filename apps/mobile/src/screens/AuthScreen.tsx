@@ -46,7 +46,7 @@ export function AuthScreen() {
         style={{ flex: 1 }}
       >
         <View style={styles.titleBlock}>
-          <Text style={styles.titleGold}>ג׳ין</Text>
+          <Text style={styles.titleGold}>משחקי</Text>
           <Text style={styles.titleCream}>TV</Text>
         </View>
 

@@ -93,7 +93,7 @@ export function ScanScreen({ navigation }: Props) {
       setScanned(true);
       const parsed = decodeJoinUrl(data);
       if (!parsed) {
-        Alert.alert("קוד לא תקין", "ה-QR לא נראה כקוד חיבור של ג׳ין TV");
+        Alert.alert("קוד לא תקין", "ה-QR לא נראה כקוד חיבור של משחקי TV");
         setTimeout(() => setScanned(false), 1500);
         return;
       }
