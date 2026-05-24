@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -186,10 +187,13 @@ const styles = StyleSheet.create({
   },
   scanFrame: {
     position: "absolute",
-    top: 60,
-    bottom: 60,
-    left: 60,
-    right: 60,
+    // Square — sized to ~70% of the narrower viewport dimension, centered.
+    width: Math.min(Dimensions.get("window").width, 600) * 0.7,
+    height: Math.min(Dimensions.get("window").width, 600) * 0.7,
+    top: "50%",
+    left: "50%",
+    marginTop: -(Math.min(Dimensions.get("window").width, 600) * 0.35),
+    marginLeft: -(Math.min(Dimensions.get("window").width, 600) * 0.35),
     borderWidth: 3,
     borderColor: theme.gold,
     borderRadius: 12,
