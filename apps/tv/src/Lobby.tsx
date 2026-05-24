@@ -30,56 +30,56 @@ export function Lobby({ state, joinUrl, countdown }: Props) {
   const gameLabel = GAME_LABEL[(state.gameType as GameType) ?? "gin"];
 
   return (
-    <div className="lobby">
-      <div className="title">
-        <span className="accent">{gameLabel}</span> TV
+    <div className="lobby-landscape">
+      {/* Right column (visual right in RTL = primary): identity + code + players */}
+      <div className="lobby-side">
+        <div className="title" style={{ fontSize: 84 }}>
+          <span className="accent">{gameLabel}</span> TV
+        </div>
+
+        <div className="code-block">
+          <div className="code-label">{HE.roomCode}</div>
+          <div className="room-code huge">{state.roomCode}</div>
+          <div className="code-hint">סרקו את ה-QR או הקלידו את הקוד באפליקציה</div>
+        </div>
+
+        <div className="lobby-players">
+          {state.players.map((p: any) => (
+            <div key={p.id} className={`player-chip ${p.ready ? "ready" : ""}`}>
+              <div className="avatar">{p.avatar || p.name?.[0] || "?"}</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>{p.name}</div>
+                <div className="ready-label">{p.ready ? HE.ready : HE.notReady}</div>
+              </div>
+              <div className="ready-dot" />
+            </div>
+          ))}
+          {Array.from({ length: 2 - state.players.length }).map((_, i) => (
+            <div key={`slot-${i}`} className="player-chip" style={{ opacity: 0.45 }}>
+              <div className="avatar">?</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 18 }}>{HE.waitingOpponent}</div>
+                <div className="ready-label">—</div>
+              </div>
+              <div className="ready-dot" />
+            </div>
+          ))}
+        </div>
+
+        {state.players.length === 2 && !state.players.every((p: any) => p.ready) && (
+          <div className="ready-hint">
+            לחצו <b style={{ color: "var(--gold)" }}>{HE.ready}</b> בנייד כשמוכנים
+          </div>
+        )}
       </div>
 
-      <div style={{ color: "var(--text-dim)", fontSize: 22, marginBottom: 8 }}>
-        {HE.scanToJoin}
-      </div>
-
-      <div className="lobby-card" style={{ padding: 24, gap: 14 }}>
+      {/* Left column (visual left in RTL): QR */}
+      <div className="lobby-qr-wrap">
         <div className="qr-frame">
-          {qr ? <img src={qr} width={320} height={320} alt="QR" /> : null}
+          {qr ? <img src={qr} width={420} height={420} alt="QR" /> : null}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 4 }}>
-          <div style={{ fontSize: 18, color: "var(--text-dim)" }}>{HE.roomCode}</div>
-          <div className="room-code">{state.roomCode}</div>
-        </div>
-        <div style={{ fontSize: 14, color: "var(--text-dim)", marginTop: -4 }}>
-          או הקלידו את הקוד ידנית באפליקציה
-        </div>
+        <div className="qr-caption">{HE.scanToJoin}</div>
       </div>
-
-      <div className="players-strip">
-        {state.players.map((p: any) => (
-          <div key={p.id} className={`player-chip ${p.ready ? "ready" : ""}`}>
-            <div className="avatar">{p.avatar || p.name?.[0] || "?"}</div>
-            <div>
-              <div style={{ fontWeight: 700 }}>{p.name}</div>
-              <div className="ready-label">{p.ready ? HE.ready : HE.notReady}</div>
-            </div>
-            <div className="ready-dot" />
-          </div>
-        ))}
-        {Array.from({ length: 2 - state.players.length }).map((_, i) => (
-          <div key={`slot-${i}`} className="player-chip" style={{ opacity: 0.45 }}>
-            <div className="avatar">?</div>
-            <div>
-              <div style={{ fontWeight: 700 }}>{HE.waitingOpponent}</div>
-              <div className="ready-label">—</div>
-            </div>
-            <div className="ready-dot" />
-          </div>
-        ))}
-      </div>
-
-      {state.players.length === 2 && !state.players.every((p: any) => p.ready) && (
-        <div style={{ color: "var(--text-dim)", fontSize: 18 }}>
-          לחצו <b style={{ color: "var(--gold)" }}>{HE.ready}</b> בנייד כשמוכנים
-        </div>
-      )}
     </div>
   );
 }

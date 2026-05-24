@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { StyleSheet, Text, View, ViewStyle } from "react-native";
+import { I18nManager, StyleSheet, Text, View, ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -7,7 +7,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
-import type { Card as CardT, Rank, Suit } from "@gin-tv/shared";
+import type { Card as CardT, Suit } from "@gin-tv/shared";
 import { theme } from "../theme";
 
 const SUIT_PATH: Record<Suit, string> = {
@@ -26,92 +26,17 @@ function SuitIcon({ suit, size, color }: { suit: Suit; size: number; color: stri
   );
 }
 
-function CenterPips({
-  rank,
-  suit,
-  color,
-  w,
-  h,
-  size,
-}: {
-  rank: Rank;
-  suit: Suit;
-  color: string;
-  w: number;
-  h: number;
-  size: "sm" | "md" | "lg";
-}) {
-  if (rank === "A" || rank === "J" || rank === "Q" || rank === "K") {
-    const big = size === "lg" ? 56 : size === "md" ? 40 : 24;
-    return (
-      <View
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: w,
-          height: h,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <SuitIcon suit={suit} size={big} color={color} />
-      </View>
-    );
-  }
-  const n = parseInt(rank, 10);
-  const layouts: Record<number, [number, number][]> = {
-    2: [[0.5, 0.25], [0.5, 0.75]],
-    3: [[0.5, 0.2], [0.5, 0.5], [0.5, 0.8]],
-    4: [[0.3, 0.25], [0.7, 0.25], [0.3, 0.75], [0.7, 0.75]],
-    5: [[0.3, 0.25], [0.7, 0.25], [0.5, 0.5], [0.3, 0.75], [0.7, 0.75]],
-    6: [[0.3, 0.2], [0.7, 0.2], [0.3, 0.5], [0.7, 0.5], [0.3, 0.8], [0.7, 0.8]],
-    7: [[0.3, 0.2], [0.7, 0.2], [0.5, 0.35], [0.3, 0.5], [0.7, 0.5], [0.3, 0.8], [0.7, 0.8]],
-    8: [[0.3, 0.2], [0.7, 0.2], [0.5, 0.32], [0.3, 0.5], [0.7, 0.5], [0.5, 0.68], [0.3, 0.8], [0.7, 0.8]],
-    9: [[0.3, 0.18], [0.7, 0.18], [0.3, 0.38], [0.7, 0.38], [0.5, 0.5], [0.3, 0.62], [0.7, 0.62], [0.3, 0.82], [0.7, 0.82]],
-    10: [[0.3, 0.15], [0.7, 0.15], [0.5, 0.24], [0.3, 0.32], [0.7, 0.32], [0.3, 0.68], [0.7, 0.68], [0.5, 0.76], [0.3, 0.85], [0.7, 0.85]],
-  };
-  const positions = layouts[n] || [];
-  const pip = size === "lg" ? 16 : size === "md" ? 12 : 8;
-  return (
-    <View
-      style={{
-        position: "absolute",
-        top: 0,
-        left: 0,
-        width: w,
-        height: h,
-      }}
-    >
-      {positions.map(([x, y], i) => {
-        const flipped = y > 0.5;
-        return (
-          <View
-            key={i}
-            style={{
-              position: "absolute",
-              left: x * w - pip / 2,
-              top: y * h - pip / 2,
-              transform: flipped ? [{ rotate: "180deg" }] : [],
-            }}
-          >
-            <SuitIcon suit={suit} size={pip} color={color} />
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
 interface Props {
   card: CardT;
   size?: "sm" | "md" | "lg";
   selected?: boolean;
   style?: ViewStyle;
   faded?: boolean;
+  /** Visually highlight that this card is part of a meld (for in-hand grouping hints). */
+  meldColor?: string;
 }
 
-export function CardView({ card, size = "md", selected, style, faded }: Props) {
+export function CardView({ card, size = "md", selected, style, faded, meldColor }: Props) {
   const red = SUIT_RED[card.suit];
   const color = red ? theme.red : theme.black;
   const dims = size === "lg" ? L : size === "sm" ? S : M;
@@ -126,29 +51,35 @@ export function CardView({ card, size = "md", selected, style, faded }: Props) {
     transform: [{ translateY: lift.value }, { scale: scale.value }],
   }));
 
+  // direction:"ltr" wrapper ensures the inner absolute positioning doesn't
+  // mirror in the RTL global layout.
   return (
     <Animated.View
       style={[
         styles.card,
         { width: dims.w, height: dims.h, borderRadius: dims.r },
         selected && styles.selected,
+        !!meldColor && { borderColor: meldColor, borderWidth: 2 },
         faded && { opacity: 0.5 },
         animatedStyle,
         style,
       ]}
     >
-      <View style={styles.cornerTop}>
-        <Text style={[styles.rank, { color, fontSize: dims.cornerFs }]}>
-          {card.rank}
-        </Text>
-        <SuitIcon suit={card.suit} size={dims.cornerFs - 2} color={color} />
-      </View>
-      <CenterPips rank={card.rank} suit={card.suit} color={color} w={dims.w} h={dims.h} size={size} />
-      <View style={styles.cornerBot}>
-        <Text style={[styles.rank, { color, fontSize: dims.cornerFs }]}>
-          {card.rank}
-        </Text>
-        <SuitIcon suit={card.suit} size={dims.cornerFs - 2} color={color} />
+      <View style={ltrFill}>
+        {/* Top-left: rank + suit */}
+        <View style={styles.cornerTL}>
+          <Text style={[styles.rank, { color, fontSize: dims.cornerRank }]}>{card.rank}</Text>
+          <SuitIcon suit={card.suit} size={dims.cornerSuit} color={color} />
+        </View>
+        {/* Center: big suit */}
+        <View style={styles.centerFill}>
+          <SuitIcon suit={card.suit} size={dims.center} color={color} />
+        </View>
+        {/* Bottom-right: rank + suit, rotated 180 */}
+        <View style={styles.cornerBR}>
+          <Text style={[styles.rank, { color, fontSize: dims.cornerRank }]}>{card.rank}</Text>
+          <SuitIcon suit={card.suit} size={dims.cornerSuit} color={color} />
+        </View>
       </View>
     </Animated.View>
   );
@@ -170,25 +101,60 @@ export function CardBackView({ size = "md", style }: { size?: "sm" | "md" | "lg"
         style,
       ]}
     >
-      <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", opacity: 0.5 }}>
-        <SuitIcon suit="C" size={dims.centerFs} color={theme.gold} />
+      <View style={styles.centerFill}>
+        <SuitIcon suit="C" size={dims.center} color={theme.gold} />
       </View>
     </View>
   );
 }
 
-const S = { w: 42, h: 60, r: 6, cornerFs: 12, centerFs: 22 };
-const M = { w: 64, h: 92, r: 8, cornerFs: 16, centerFs: 32 };
-const L = { w: 80, h: 116, r: 10, cornerFs: 20, centerFs: 42 };
+const S = { w: 42, h: 60, r: 6, cornerRank: 11, cornerSuit: 9, center: 22 };
+const M = { w: 64, h: 92, r: 8, cornerRank: 16, cornerSuit: 13, center: 36 };
+const L = { w: 80, h: 116, r: 10, cornerRank: 20, cornerSuit: 16, center: 48 };
+
+const ltrFill: ViewStyle = {
+  position: "absolute",
+  top: 0,
+  bottom: 0,
+  // Use start/end which always map to LTR within this subtree.
+  left: 0,
+  right: 0,
+  direction: "ltr",
+};
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: theme.cardFace,
     borderWidth: 1.5,
     borderColor: theme.cardBorder,
-    padding: 6,
     overflow: "hidden",
     position: "relative",
+    // Force LTR so internal layout coordinates aren't mirrored by RN's RTL flip.
+    direction: "ltr",
+  },
+  // Top-left of the LTR card surface — universal playing-card corner.
+  cornerTL: {
+    position: "absolute",
+    top: 3,
+    left: 4,
+    alignItems: "center",
+  },
+  // Bottom-right of the LTR card surface, rotated 180 so it reads upright when card is rotated.
+  cornerBR: {
+    position: "absolute",
+    bottom: 3,
+    right: 4,
+    alignItems: "center",
+    transform: [{ rotate: "180deg" }],
+  },
+  centerFill: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    justifyContent: "center",
   },
   selected: {
     borderColor: theme.gold,
@@ -199,13 +165,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     elevation: 14,
   },
-  cornerTop: { position: "absolute", top: 4, right: 4, alignItems: "center" },
-  cornerBot: {
-    position: "absolute",
-    bottom: 4,
-    left: 4,
-    alignItems: "center",
-    transform: [{ rotate: "180deg" }],
-  },
-  rank: { fontWeight: "800" },
+  rank: { fontWeight: "900", lineHeight: undefined },
 });

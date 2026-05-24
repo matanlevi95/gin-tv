@@ -316,6 +316,100 @@ button {
   gap: 22px;
   height: 100%;
 }
+
+/* Two-column landscape lobby — QR on one side, code + players on the other. */
+.lobby-landscape {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  gap: 60px;
+  height: 100%;
+  padding: 24px 60px;
+}
+.lobby-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  align-items: flex-start;
+  max-width: 540px;
+}
+.lobby-side .title {
+  margin-bottom: 4px;
+}
+.code-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.code-label {
+  font-size: 18px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.room-code.huge {
+  font-family: "Rubik", sans-serif;
+  font-size: 140px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: var(--gold-soft);
+  text-shadow: 0 6px 32px rgba(212, 168, 91, 0.45);
+  line-height: 0.95;
+}
+.code-hint {
+  color: var(--text-dim);
+  font-size: 16px;
+  margin-top: 6px;
+}
+.lobby-players {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+.lobby-players .player-chip {
+  width: 100%;
+  padding: 14px 18px;
+}
+.ready-hint {
+  color: var(--text-dim);
+  font-size: 18px;
+}
+.lobby-qr-wrap {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  background: var(--panel);
+  padding: 28px;
+  border-radius: 24px;
+  border: 1px solid rgba(212, 168, 91, 0.3);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.qr-caption {
+  color: var(--text-dim);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+/* Narrow viewport (phones / portrait TVs): collapse to a single column. */
+@media (max-width: 900px) {
+  .lobby-landscape {
+    flex-direction: column;
+    gap: 24px;
+    padding: 24px;
+  }
+  .lobby-side {
+    align-items: center;
+    max-width: 100%;
+  }
+  .room-code.huge {
+    font-size: 96px;
+  }
+}
 .lobby-card {
   background: var(--panel);
   padding: 28px 36px;

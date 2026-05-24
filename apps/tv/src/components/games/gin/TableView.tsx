@@ -7,6 +7,49 @@ interface Props {
   message?: string;
 }
 
+/** Rolling log of the last few server-emitted actions, formatted for the TV side panel. */
+function useMoveLog(state: PublicGameState) {
+  const [log, setLog] = useState<{ id: number; text: string; at: number }[]>([]);
+  const lastAt = useRef(0);
+  const idRef = useRef(0);
+  useEffect(() => {
+    const at = state.lastAction?.at ?? 0;
+    if (!at || at === lastAt.current) return;
+    lastAt.current = at;
+    const a = state.lastAction;
+    if (!a) return;
+    const byName = state.players.find((p) => p.id === a.by)?.name ?? "";
+    let text = "";
+    switch (a.kind) {
+      case "deal":
+        text = "חלוקה חדשה";
+        break;
+      case "draw_deck":
+        text = `${byName} לקח מהקופה`;
+        break;
+      case "draw_discard":
+        text = `${byName} לקח מהזריקה`;
+        break;
+      case "discard":
+        text = `${byName} זרק קלף`;
+        break;
+      case "knock":
+        text = `${byName} הכריז נקישה`;
+        break;
+      case "gin":
+        text = `${byName} ג׳ין!`;
+        break;
+      case "undercut":
+        text = `${byName} עשה אנדרקאט!`;
+        break;
+      default:
+        return;
+    }
+    setLog((prev) => [{ id: ++idRef.current, text, at }, ...prev].slice(0, 5));
+  }, [state.lastAction, state.players]);
+  return log;
+}
+
 /** Score number that briefly animates with a pop when its value changes. */
 function ScoreBadge({ score }: { score: number }) {
   const [pop, setPop] = useState(false);
@@ -71,16 +114,36 @@ export function TableView({ state, message }: Props) {
   const deckShake = useDeckJitter(state);
   const discardPop = useDiscardPop(state);
   const lowDeck = state.deckCount > 0 && state.deckCount < 8;
+  const moveLog = useMoveLog(state);
 
   return (
     <>
-      {/* Top-right corner: room code */}
+      {/* Top-right corner: room code + recent moves */}
       <div className="corner top-right">
         <h3>{HE.roomCode}</h3>
         <div className="big">{state.roomCode}</div>
         <div style={{ marginTop: 12, color: "var(--text-dim)", fontSize: 14 }}>
           {HE.round} {state.round} · {HE.target} {state.targetScore}
         </div>
+        {moveLog.length > 0 && (
+          <div style={{ marginTop: 18, borderTop: "1px solid rgba(212,168,91,0.15)", paddingTop: 10 }}>
+            <h3>מהלכים אחרונים</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+              {moveLog.map((m, i) => (
+                <div
+                  key={m.id}
+                  style={{
+                    color: i === 0 ? "var(--gold-soft)" : "var(--text-dim)",
+                    fontSize: i === 0 ? 16 : 13,
+                    fontWeight: i === 0 ? 700 : 400,
+                  }}
+                >
+                  {m.text}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Top-left corner: scores */}
